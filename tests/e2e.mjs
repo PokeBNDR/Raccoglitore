@@ -484,6 +484,41 @@ try {
 	await page.waitForFunction(() => location.hash === '#/cerca' && document.querySelectorAll('[data-testid=tile]').length > 5, null, { timeout: 20000 })
 	const jumped = `${await page.inputValue('#search-q')} · ${(await page.locator('.seg button[aria-pressed=true]').innerText()).trim()}`
 	ok('…e il pulsante apre il catalogo giapponese già sul Pokémon', jumped === 'Charizard · Giapponese' && (await page.locator('.sheet').count()) === 0, jumped)
+
+	// ---------- the saved list of sealed products is replaced when the app is newer than it
+	// Rewrites the copy the app keeps on the device: other names, saved at the given time.
+	const plantSealed = (t, mark) =>
+		page.evaluate(
+			async ({ t, mark }) => {
+				const url = new URL('data/sealed.json', document.baseURI).href
+				const wait = (req) => new Promise((res, rej) => ((req.onsuccess = () => res(req.result)), (req.onerror = () => rej(req.error))))
+				const db = await wait(indexedDB.open('raccoglitore-cache'))
+				const entry = await wait(db.transaction('http').objectStore('http').get(url))
+				const fresh = await (await fetch(url, { cache: 'no-cache' })).json()
+				const data = { ...fresh, p: fresh.p.map((row) => [row[0], `${mark} ${row[1]}`, ...row.slice(2)]) }
+				await wait(db.transaction('http', 'readwrite').objectStore('http').put({ t, data }, url))
+				db.close()
+				return !!entry
+			},
+			{ t, mark },
+		)
+	const sealedNamesOf = async (setId) => {
+		await page.goto(APP + '#/set/int/' + setId)
+		await page.reload()
+		await page.locator('.seg button', { hasText: 'Sigillati' }).click()
+		await page.waitForSelector('[data-testid=sealed-row]')
+		return (await page.locator('[data-testid=sealed-row] .name').allInnerTexts()).join('|')
+	}
+	const builtAt = Date.parse(await page.evaluate(() => document.documentElement.dataset.built))
+	const hadCopy = await plantSealed(builtAt - 60_000, 'VECCHIA')
+	const afterOld = await sealedNamesOf('base1')
+	ok('sigillati: una copia salvata prima di questa versione viene riscaricata', hadCopy && Number.isFinite(builtAt) && !/VECCHIA/.test(afterOld), afterOld)
+	await plantSealed(Date.now(), 'SALVATA')
+	const afterNew = await sealedNamesOf('base1')
+	ok('sigillati: una copia salvata dopo resta quella usata, senza riscaricare', /^SALVATA /.test(afterNew), afterNew)
+	await plantSealed(Date.now() - 7 * 3_600_000, 'SCADUTA')
+	const afterExpired = await sealedNamesOf('base1')
+	ok('sigillati: dopo sei ore la copia viene comunque rinnovata', !/SCADUTA/.test(afterExpired), afterExpired)
 } catch (err) {
 	ok('esecuzione completa', false, String(err?.message ?? err).split('\n')[0])
 	await shot('99-errore').catch(() => {})

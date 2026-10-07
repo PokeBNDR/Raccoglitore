@@ -5,6 +5,10 @@ import { initStore } from './lib/store'
 import './styles.css'
 
 declare const __SINGLE_FILE__: boolean
+declare const __BUILD_TIME__: string
+
+// Which version of the app is running, readable from outside (the tests use it).
+document.documentElement.dataset.built = __BUILD_TIME__
 
 createRoot(document.getElementById('root')!).render(<App />)
 void initStore()

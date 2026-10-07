@@ -4,6 +4,10 @@ import { getSets } from './tcgdex'
 import type { CardInfo, Catalog, CmPrice } from './types'
 
 declare const __SINGLE_FILE__: boolean
+declare const __BUILD_TIME__: string
+
+/** When this version of the app was built (0 where that is not known, as in the tests). */
+const BUILT_AT = typeof __BUILD_TIME__ !== 'undefined' ? Date.parse(__BUILD_TIME__) || 0 : 0
 
 /**
  * Sealed products (booster packs and boxes, Elite Trainer Boxes, tins, collections, decks…).
@@ -235,6 +239,9 @@ export function searchSealed(
 
 const TTL = 6 * 3_600_000
 let built: { src: SealedFile; stale: boolean; index: SealedIndex } | null = null
+/** The saved copy of the file has been compared with the age of this version of the app. */
+let buildChecked = false
+let buildTriedAt = 0
 
 /** Address of the data file, next to the app's own page. */
 export const sealedUrl = (): string => new URL('data/sealed.json', document.baseURI).href
@@ -246,7 +253,26 @@ export const sealedUrl = (): string => new URL('data/sealed.json', document.base
 export async function loadSealed(opts: { force?: boolean } = {}): Promise<{ index: SealedIndex | null; t: number; stale: boolean }> {
 	// The one-file version of the app is opened from disk and has nothing next to it to load.
 	if (typeof __SINGLE_FILE__ !== 'undefined' && __SINGLE_FILE__) return { index: null, t: Date.now(), stale: false }
-	const a = await getJsonMeta<SealedFile>(sealedUrl(), TTL, { force: opts.force })
+	const asked = Date.now()
+	// `fresh`: the file sits next to the app, where the browser would otherwise reuse for ten minutes
+	// the copy it already has, even right after a new version went online.
+	let a = await getJsonMeta<SealedFile>(sealedUrl(), TTL, { force: opts.force, fresh: true })
+	// The file is rebuilt every time the app is: a copy saved before this version of the app was made
+	// is older than the one online, whatever its age. Settled once per session, so that a device with
+	// its clock set back does not download the file over and over.
+	if (!buildChecked && !a.stale) {
+		const fromSaved = a.t < asked
+		if (!fromSaved || a.t >= BUILT_AT) buildChecked = true
+		else if (asked - buildTriedAt > 60_000) {
+			buildTriedAt = asked
+			const b = await getJsonMeta<SealedFile>(sealedUrl(), TTL, { force: true, fresh: true }).catch(() => null)
+			// With no network the saved copy keeps being used, and the question is asked again later.
+			if (b && !b.stale) {
+				a = b
+				buildChecked = true
+			}
+		}
+	}
 	const file = a.data
 	if (!file || file.v !== 1 || !Array.isArray(file.p) || !file.p.length) return { index: null, t: a.t, stale: a.stale }
 	if (built?.src !== file || built.stale !== a.stale) built = { src: file, stale: a.stale, index: buildIndex(file, a.stale) }

@@ -58,6 +58,8 @@ export interface GetOpts {
 	signal?: AbortSignal
 	/** Keep the answer only in memory (search results). */
 	memoryOnly?: boolean
+	/** When the network is asked, have the server confirm its copy instead of trusting the browser's own cache. */
+	fresh?: boolean
 }
 
 export interface Answer<T> {
@@ -84,7 +86,7 @@ export async function getJsonMeta<T>(url: string, ttlMs: number, opts: GetOpts =
 	const p = (async (): Promise<Answer<T>> => {
 		try {
 			// No custom headers: the request stays a "simple" one, with no CORS preflight round trip.
-			const res = await fetch(url, { signal: opts.signal })
+			const res = await fetch(url, opts.fresh ? { signal: opts.signal, cache: 'no-cache' } : { signal: opts.signal })
 			if (res.status !== 404 && !res.ok) throw new HttpError(res.status, url)
 			const data = res.status === 404 ? null : ((await res.json()) as T)
 			const entry = { t: Date.now(), data }
