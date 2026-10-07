@@ -3,6 +3,8 @@
 Il portfolio delle carte Pokémon, con **lingua** e **condizione** di ogni copia.
 Web app installabile sul telefono: cerca una carta nel catalogo, scegli com'è la tua copia e il valore si calcola dai prezzi Cardmarket.
 
+**App online: <https://pokebndr.github.io/Raccoglitore/>**
+
 ## Cosa fa
 
 - Catalogo completo con immagini: internazionale (nomi in italiano e inglese), giapponese, coreano, cinese.

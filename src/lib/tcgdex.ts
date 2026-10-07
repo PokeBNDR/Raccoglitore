@@ -532,4 +532,23 @@ export function imageCandidates(images: Record<string, string>, prefer: string[]
 	return out
 }
 
-export const setLogoUrl = (base?: string) => (base ? `${base}.webp` : undefined)
+/**
+ * Logo urls of a set to try, best first. The catalogue now and then lists a logo whose webp file is
+ * missing while the png is there, so: webp, png, the English logo when the Italian one fails, and
+ * last the small set symbol.
+ */
+export function logoCandidates(logo?: string, symbol?: string): string[] {
+	const out: string[] = []
+	const push = (base?: string) => {
+		if (!base) return
+		for (const ext of ['webp', 'png']) {
+			const url = `${base}.${ext}`
+			if (!out.includes(url)) out.push(url)
+		}
+	}
+	push(logo)
+	const m = logo?.match(ASSET)
+	if (m && m[2] === 'it') push(`${m[1]}en${m[3]}`)
+	push(symbol)
+	return out
+}

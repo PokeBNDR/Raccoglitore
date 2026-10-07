@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from '../components/Toast'
-import { dayStr, fmtWhen, numToInput, parseNum } from '../lib/format'
+import { dayStr, fmtWhen, numToInput, ofWhen, parseNum } from '../lib/format'
 import { BASIS, CONDS, DEFAULT_SETTINGS, LANGS } from '../lib/labels'
 import {
 	exportData,
@@ -165,7 +165,7 @@ export function SettingsView() {
 			const cm = card?.cm ?? card?.variants.find((v) => v.cm)?.cm
 			if (!card || stale) setProbe({ ok: false, text: 'Il catalogo non risponde. Controlla la connessione e riprova tra poco.' })
 			else if (!cm?.updated) setProbe({ ok: false, text: `Il catalogo risponde (${ms} ms) ma senza i prezzi Cardmarket.` })
-			else setProbe({ ok: true, text: `Catalogo raggiungibile in ${ms} ms. Listino Cardmarket di ${fmtWhen(cm.updated)}.` })
+			else setProbe({ ok: true, text: `Catalogo raggiungibile in ${ms} ms. Listino Cardmarket ${ofWhen(cm.updated)}.` })
 		} catch {
 			setProbe({ ok: false, text: 'Non riesco a raggiungere il catalogo. Controlla la connessione e riprova tra poco.' })
 		}
@@ -384,7 +384,9 @@ export function SettingsView() {
 							</span>
 						) : null}
 					</div>
-					<p className="small muted num">Versione del {fmtWhen(__BUILD_TIME__)}.</p>
+					<p className="small muted num" data-testid="build">
+						Versione {ofWhen(__BUILD_TIME__)}.
+					</p>
 				</section>
 
 				{holdings.length ? (

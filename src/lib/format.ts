@@ -57,19 +57,34 @@ export function fmtDay(day: string, withYear = false): string {
 	return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) })
 }
 
-/** "oggi alle 23:40", "ieri alle 08:10", "3 ott alle 12:00". */
-export function fmtWhen(ts: number | string | null | undefined): string {
-	if (ts == null) return '—'
+function whenParts(ts: number | string | null | undefined): { text: string; relative: boolean; day: number } | null {
+	if (ts == null) return null
 	const d = new Date(ts)
-	if (Number.isNaN(d.getTime())) return '—'
+	if (Number.isNaN(d.getTime())) return null
 	const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 	const today = dayStr()
 	const that = dayStr(d)
-	if (that === today) return `oggi alle ${time}`
+	if (that === today) return { text: `oggi alle ${time}`, relative: true, day: d.getDate() }
 	const y = new Date()
 	y.setDate(y.getDate() - 1)
-	if (that === dayStr(y)) return `ieri alle ${time}`
-	return `${d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} alle ${time}`
+	if (that === dayStr(y)) return { text: `ieri alle ${time}`, relative: true, day: d.getDate() }
+	return { text: `${d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} alle ${time}`, relative: false, day: d.getDate() }
+}
+
+/** "oggi alle 23:40", "ieri alle 08:10", "3 ott alle 12:00". */
+export function fmtWhen(ts: number | string | null | undefined): string {
+	return whenParts(ts)?.text ?? '—'
+}
+
+/**
+ * The same moment with its preposition, to follow a noun: "listino di ieri alle 08:10",
+ * "listino del 3 ott alle 12:00", "listino dell’8 ott alle 12:00".
+ */
+export function ofWhen(ts: number | string | null | undefined): string {
+	const p = whenParts(ts)
+	if (!p) return '—'
+	if (p.relative) return `di ${p.text}`
+	return `${p.day === 1 || p.day === 8 || p.day === 11 ? 'dell’' : 'del '}${p.text}`
 }
 
 export function uid(): string {

@@ -43,6 +43,9 @@ await context.route('https://assets.tcgdex.net/**', (route) => {
 	const lang = parts[0]
 	// German pictures do not exist here: the app must fall back to another language.
 	if (lang === 'de') return route.fulfill({ status: 404, body: '' })
+	// Italian set logos exist only as png here, as happens now and then on the real server:
+	// the app must try the other file format before giving up.
+	if (lang === 'it' && /\/logo\.webp$/.test(url.pathname)) return route.fulfill({ status: 404, body: '' })
 	const label = parts.slice(1).join(' ')
 	const isLogo = /logo|symbol/.test(url.pathname)
 	const svg = isLogo
@@ -220,6 +223,23 @@ try {
 	await page.waitForSelector('.setrow')
 	const firstSet = await page.locator('.setrow').first().innerText()
 	ok('set: elenco dal più recente', /30th|Celebration|Pitch|Classic/i.test(firstSet), firstSet.replace(/\n/g, ' | '))
+	const pngLogo = (s) => /\/it\/.+\/logo\.png$/.test(s)
+	const logos = await page
+		.waitForFunction(
+			() => {
+				const shown = [...document.querySelectorAll('.setlogo img')].filter((i) => i.complete && i.naturalWidth > 0).map((i) => i.currentSrc)
+				return shown.some((s) => /\/it\/.+\/logo\.png$/.test(s)) ? shown : null
+			},
+			null,
+			{ timeout: 10000 },
+		)
+		.then((h) => h.jsonValue())
+		.catch(() => [])
+	ok(
+		'set: se un logo manca in un formato uso l’altro',
+		logos.some(pngLogo) && imageHits.some((p) => /^\/it\/.+\/logo\.webp$/.test(p)),
+		`${logos.filter(pngLogo).length} logo italiani caricati come png`,
+	)
 	await shot('08-set')
 	await page.fill('#sets-q', 'set base')
 	await page.waitForTimeout(300)
@@ -345,7 +365,9 @@ try {
 	await page.locator('[data-testid=probe]').click()
 	await page.waitForSelector('[data-testid=probe-result]', { timeout: 15000 })
 	const probe = await page.locator('[data-testid=probe-result]').innerText()
-	ok('verifica del collegamento: catalogo e listino raggiunti', /Catalogo raggiungibile/.test(probe) && /Listino Cardmarket/.test(probe), probe)
+	ok('verifica del collegamento: catalogo e listino raggiunti', /Catalogo raggiungibile/.test(probe) && /Listino Cardmarket (di|del|dell’)/.test(probe), probe)
+	const build = (await page.locator('[data-testid=build]').innerText()).trim()
+	ok('data della versione scritta in italiano corretto', /^Versione (di oggi|di ieri|del \d|dell’\d)/.test(build), build)
 	await page.locator('.tabs a', { hasText: 'Portfolio' }).click()
 	await page.waitForSelector('.rows .row')
 

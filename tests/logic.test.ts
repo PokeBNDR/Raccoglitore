@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { dayStr, eurTight, parseNum, pct, round2 } from '../src/lib/format'
+import { dayStr, eurTight, fmtWhen, ofWhen, parseNum, pct, round2 } from '../src/lib/format'
 import { DEFAULT_SETTINGS, cardNumber, variantLabel } from '../src/lib/labels'
 import { cardmarketUrl, ebaySoldUrl, marketQuery, namedOf } from '../src/lib/links'
 import { basePrice, figure, pickVariant, priceSource, totals, unitValue } from '../src/lib/pricing'
 import type { CardInfo, Holding, VariantOpt } from '../src/lib/types'
 
 // Only the pure parts of tcgdex.ts are imported: the module reads import.meta.env at load.
-import { defaultVariant, imageCandidates, parseQuery, setIdOf } from '../src/lib/tcgdex'
+import { defaultVariant, imageCandidates, logoCandidates, parseQuery, setIdOf } from '../src/lib/tcgdex'
 
 const v = (o: Partial<VariantOpt> & { key: string; type: string }): VariantOpt => ({ stamps: [], ...o })
 
@@ -93,6 +93,21 @@ describe('prezzi digitati', () => {
 		expect(eurTight(1168.49).replace(/\s/g, ' ')).toBe('1168 €')
 		expect(round2(0.048)).toBe(0.05)
 		expect(dayStr(new Date(2026, 9, 6))).toBe('2026-10-06')
+	})
+	it('date dopo un nome: «di ieri», «del 3 ott», «dell’8 ott»', () => {
+		const at = (d: Date) => ofWhen(d.getTime()).replace(/\s/g, ' ')
+		const now = new Date()
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 5)
+		const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 11, 52)
+		expect(at(today)).toBe('di oggi alle 09:05')
+		expect(fmtWhen(today.getTime())).toBe('oggi alle 09:05')
+		expect(at(yesterday)).toBe('di ieri alle 11:52')
+		expect(at(new Date(2020, 9, 3, 12, 0))).toBe('del 3 ott alle 12:00')
+		expect(at(new Date(2020, 9, 8, 12, 0))).toBe('dell’8 ott alle 12:00')
+		expect(at(new Date(2020, 9, 11, 12, 0))).toBe('dell’11 ott alle 12:00')
+		expect(at(new Date(2020, 9, 1, 12, 0))).toBe('dell’1 ott alle 12:00')
+		expect(ofWhen(null)).toBe('—')
+		expect(ofWhen('non una data')).toBe('—')
 	})
 })
 
@@ -241,6 +256,22 @@ describe('catalogo', () => {
 		// No Italian picture in the catalogue: it is not requested at all.
 		expect(imageCandidates({ en: imgs.en }, ['it'], 'low')).toEqual(['https://assets.tcgdex.net/en/base/base1/4/low.webp'])
 		expect(imageCandidates({}, ['it'], 'low')).toEqual([])
+	})
+	it('logo dei set: altro formato, poi quello inglese, poi il simbolo', () => {
+		const a = 'https://assets.tcgdex.net'
+		expect(logoCandidates(`${a}/it/me/me05/logo`, `${a}/univ/me/me05/symbol`)).toEqual([
+			`${a}/it/me/me05/logo.webp`,
+			`${a}/it/me/me05/logo.png`,
+			`${a}/en/me/me05/logo.webp`,
+			`${a}/en/me/me05/logo.png`,
+			`${a}/univ/me/me05/symbol.webp`,
+			`${a}/univ/me/me05/symbol.png`,
+		])
+		// An English or a Japanese logo has no other language to fall back on.
+		expect(logoCandidates(`${a}/en/base/base1/logo`)).toEqual([`${a}/en/base/base1/logo.webp`, `${a}/en/base/base1/logo.png`])
+		expect(logoCandidates(`${a}/ja/SV/SV2a/logo`)).toEqual([`${a}/ja/SV/SV2a/logo.webp`, `${a}/ja/SV/SV2a/logo.png`])
+		expect(logoCandidates(undefined, `${a}/univ/base/base1/symbol`)).toEqual([`${a}/univ/base/base1/symbol.webp`, `${a}/univ/base/base1/symbol.png`])
+		expect(logoCandidates()).toEqual([])
 	})
 	it('etichette', () => {
 		expect(cardNumber('4', 102)).toBe('4/102')

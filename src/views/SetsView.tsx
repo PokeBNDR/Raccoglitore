@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CardTile } from '../components/CardTile'
 import { IconBack, IconClose, IconSearch } from '../components/Icons'
 import { fmtDay, fold } from '../lib/format'
@@ -6,18 +6,21 @@ import { useAsync } from '../lib/hooks'
 import { CATALOGS, catalogName, titleSize } from '../lib/labels'
 import { back, href } from '../lib/router'
 import { useStore } from '../lib/store'
-import { getSet, getSets, setLogoUrl } from '../lib/tcgdex'
+import { getSet, getSets, logoCandidates } from '../lib/tcgdex'
 import type { Catalog, SetBrief } from '../lib/types'
 
 const memo = { catalog: 'int' as Catalog, q: '' }
 
+/** Set logo with fallbacks: another file format, the English logo, the set symbol, then the set code. */
 function SetLogo({ set }: { set: Pick<SetBrief, 'logo' | 'symbol' | 'id' | 'name'> }) {
-	const [broken, setBroken] = useState(false)
-	const url = setLogoUrl(set.logo) ?? setLogoUrl(set.symbol)
+	const urls = useMemo(() => logoCandidates(set.logo, set.symbol), [set.logo, set.symbol])
+	const [i, setI] = useState(0)
+	useEffect(() => setI(0), [urls])
+	const url = urls[i]
 	return (
 		<span className="setlogo">
-			{url && !broken ? (
-				<img src={url} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />
+			{url ? (
+				<img key={url} src={url} alt="" loading="lazy" decoding="async" onError={() => setI((n) => n + 1)} />
 			) : (
 				<span className="ph">{set.id.toUpperCase().slice(0, 7)}</span>
 			)}

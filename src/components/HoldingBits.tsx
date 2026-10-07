@@ -1,4 +1,4 @@
-import { eur, eurTight, fmtWhen, usd } from '../lib/format'
+import { eur, eurTight, fmtWhen, ofWhen, usd } from '../lib/format'
 import { BASIS, basisName, condName, variantLabel } from '../lib/labels'
 import { figure, priceSource, type UnitResult } from '../lib/pricing'
 import type { CardInfo, Holding, PriceBasis, VariantOpt } from '../lib/types'
@@ -39,7 +39,7 @@ export function PricePanel({ card, activeKey, basis }: { card: CardInfo; activeK
 		<section className="glass t-graphite quiet panel">
 			<div className="hstack" style={{ justifyContent: 'space-between' }}>
 				<h3>Prezzi Cardmarket</h3>
-				{updated ? <span className="small muted">listino di {fmtWhen(updated)}</span> : null}
+				{updated ? <span className="small muted">listino {ofWhen(updated)}</span> : null}
 			</div>
 			{any ? (
 				<div>
