@@ -12,7 +12,9 @@
     "test:e2e": "node tests/e2e.mjs",
     "test:live": "node tests/live.mjs",
     "test:pwa": "node tests/pwa.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "data": "node scripts/build-sealed.mjs",
+    "data:test": "CM_NONSINGLES=tests/fixtures/cardmarket/nonsingles.json CM_PRICES=tests/fixtures/cardmarket/prices.json CM_SINGLES=tests/fixtures/cardmarket/singles.json SKIP_LOOKUPS=1 TCGDEX_API=http://127.0.0.1:3111/v2 node scripts/build-sealed.mjs"
   },
   "dependencies": {
     "@fontsource-variable/urbanist": "^5.3.0",

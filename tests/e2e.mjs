@@ -379,6 +379,107 @@ try {
 	ok('riepilogo: i tre pannelli si raggiungono dai puntini', true)
 	await page.locator('.pager button').nth(1).click()
 	await overflow('portfolio con i pannelli')
+
+	// ---------- sealed products: listed under their set (data file built from the Cardmarket fixtures)
+	const rowsBefore = await page.locator('.rows .row').count()
+	await page.locator('.tabs a', { hasText: 'Set' }).click()
+	await page.fill('#sets-q', 'set base')
+	await page.locator('a.setrow[href="#/set/int/base1"]').click()
+	await page.waitForSelector('[data-testid=tile]')
+	await page.locator('.seg button', { hasText: 'Sigillati' }).click()
+	await page.waitForSelector('[data-testid=sealed-row]')
+	const sealedNames = await page.locator('[data-testid=sealed-row] .name').allInnerTexts()
+	const heads = await page.locator('.grouphead').allInnerTexts()
+	ok(
+		'set: i prodotti sigillati dell’espansione, raggruppati per tipo',
+		sealedNames.join('|') === 'Base Set Booster Box|Base Set Booster' && heads.length === 2 && /display/i.test(heads[0]) && /buste/i.test(heads[1]),
+		`${sealedNames.join(', ')} — ${heads.join(', ')}`,
+	)
+	await shot('13-set-sigillati')
+	await overflow('sigillati del set')
+
+	// ---------- a sealed product: price, link, add with a language correction
+	await page.locator('[data-testid=sealed-row]', { hasText: 'Base Set Booster Box' }).first().waitFor()
+	await page.locator('[data-testid=sealed-row]').filter({ has: page.locator('.name', { hasText: /^Base Set Booster$/ }) }).click()
+	await page.waitForSelector('[data-testid=card-price]')
+	const sealedPrice = money(await page.locator('[data-testid=card-price] .sr').innerText())
+	const sealedCm = await page.locator('.links a.btn', { hasText: 'Cardmarket' }).getAttribute('href')
+	ok('prodotto: prezzo di tendenza e link Cardmarket', sealedPrice === 550.86 && /Products\?idProduct=271823$/.test(sealedCm), `${sealedPrice} · ${sealedCm}`)
+	ok('prodotto: una sola riga di prezzi, «Sigillato»', (await page.locator('[data-testid=price-version]').count()) === 1 && /Sigillato/.test(await page.locator('[data-testid=price-version] .pv-name').innerText()))
+	await shot('14-prodotto')
+	await overflow('scheda prodotto')
+	await page.locator('[data-testid=add]').click()
+	await page.waitForSelector('.sheet')
+	ok('modulo del prodotto: niente condizione, versione o gradazione', (await page.locator('.sheet .choice.cond').count()) === 0 && (await page.locator('#f-graded').count()) === 0)
+	await page.locator('.sheet .choice button', { hasText: /^EN$/ }).click()
+	await page.fill('#f-langmult', '1,5')
+	await page.waitForFunction(() => /× 1,5 \(EN\)/.test(document.querySelector('.calc .small')?.textContent ?? ''), null, { timeout: 5000 })
+	const sealedCalc = await page.locator('.calc .small').first().innerText()
+	ok('correzione per lingua dal modulo: il valore cambia subito', /550,86\s€ \(Tendenza\) × 1,5 \(EN\)/.test(sealedCalc) && money(await page.locator('.calc .sr').innerText()) === 826.29, sealedCalc)
+	const offers = await page.locator('[data-testid=offers]').getAttribute('href')
+	ok('modulo: link alle offerte Cardmarket nella lingua scelta', /idProduct=271823&language=1$/.test(offers), offers)
+	await page.fill('#f-qty', '3')
+	await page.fill('#f-buy', '400')
+	await shot('15-modulo-prodotto')
+	await page.locator('.sheet footer .btn.primary').click()
+	await page.waitForSelector('.sheet', { state: 'detached' })
+
+	// back to the set: the list of sealed products is still the one shown
+	await page.goBack()
+	await page.waitForSelector('[data-testid=sealed-row]')
+	const ownedNote = await page.locator('[data-testid=sealed-row]').filter({ has: page.locator('.name', { hasText: /^Base Set Booster$/ }) }).locator('.pl').innerText()
+	ok('set: tornando indietro restano i sigillati, con quanti ne ho', /ne hai 3/.test(ownedNote), ownedNote)
+
+	// ---------- the product in the portfolio
+	await page.locator('.tabs a', { hasText: 'Portfolio' }).click()
+	await page.waitForSelector('.rows .row')
+	const sealedRow = page.locator('.rows .row').filter({ has: page.locator('.chip', { hasText: 'Sigillato' }) })
+	const sealedRowText = (await sealedRow.innerText()).replace(/\n/g, ' | ')
+	ok(
+		'portfolio: il prodotto è una voce come le altre, valore = prezzo × lingua × quantità',
+		(await page.locator('.rows .row').count()) === rowsBefore + 1 && money(await sealedRow.locator('.val').innerText()) === 2478.87 && /Set Base · Busta/.test(sealedRowText),
+		sealedRowText,
+	)
+	await page.selectOption('#pf-cond', 'SEALED')
+	ok('portfolio: filtro «Sigillati»', (await page.locator('.rows .row').count()) === 1)
+	await page.selectOption('#pf-cond', '')
+	await sealedRow.click()
+	await page.waitForSelector('[data-testid=holding-value]')
+	const sealedLinks = await page.locator('.links a.btn', { hasText: 'Cardmarket' }).getAttribute('href')
+	const sealedKv = (await page.locator('.kv').innerText()).replace(/\n/g, ' ')
+	ok('copia del prodotto: link per lingua senza condizione, scheda senza condizione', /language=1$/.test(sealedLinks) && !/minCondition/.test(sealedLinks) && /Tipo\s*Busta/.test(sealedKv) && !/Condizione/.test(sealedKv), `${sealedLinks} · ${sealedKv}`)
+	await shot('16-copia-prodotto')
+	await overflow('copia del prodotto')
+
+	// ---------- search among sealed products
+	await page.locator('.tabs a', { hasText: 'Cerca' }).click()
+	await page.locator('.seg button', { hasText: 'Sigillati' }).click()
+	await page.fill('#search-q', '151 etb')
+	await page.waitForSelector('[data-testid=sealed-row]')
+	const found = await page.locator('[data-testid=sealed-row] .name').allInnerTexts()
+	ok('ricerca tra i sigillati: «151 etb»', found.join('|') === '151 Elite Trainer Box', found.join(', '))
+	await page.fill('#search-q', 'tin')
+	await page.waitForFunction(() => document.querySelector('[data-testid=sealed-row] .name')?.textContent === '151 Mini Tin', null, { timeout: 5000 })
+	ok('ricerca tra i sigillati: parole intere («tin» non trova «Destined»)', (await page.locator('[data-testid=sealed-row]').count()) === 1)
+	await shot('17-cerca-sigillati')
+	await overflow('ricerca tra i sigillati')
+
+	// ---------- a Japanese copy of an international card is sent to the Japanese catalogue
+	await page.locator('.seg button', { hasText: 'Internazionale' }).click()
+	await page.fill('#search-q', 'charizard 4/102')
+	await page.waitForFunction(() => document.querySelectorAll('[data-testid=tile]').length === 1, null, { timeout: 15000 })
+	await page.locator('[data-testid=tile]').first().click()
+	await page.locator('[data-testid=add]').click()
+	await page.waitForSelector('.sheet')
+	ok('modulo della carta: correzione per lingua visibile', await page.locator('#f-langmult').isVisible())
+	await page.locator('.sheet .choice button', { hasText: /^JA$/ }).click()
+	await page.waitForSelector('[data-testid=asian-note]')
+	ok('lingua giapponese su una carta internazionale: avviso al posto della correzione', (await page.locator('#f-langmult').count()) === 0)
+	await shot('18-avviso-giapponese')
+	await page.locator('[data-testid=asian-note] button').click()
+	await page.waitForFunction(() => location.hash === '#/cerca' && document.querySelectorAll('[data-testid=tile]').length > 5, null, { timeout: 20000 })
+	const jumped = `${await page.inputValue('#search-q')} · ${(await page.locator('.seg button[aria-pressed=true]').innerText()).trim()}`
+	ok('…e il pulsante apre il catalogo giapponese già sul Pokémon', jumped === 'Charizard · Giapponese' && (await page.locator('.sheet').count()) === 0, jumped)
 } catch (err) {
 	ok('esecuzione completa', false, String(err?.message ?? err).split('\n')[0])
 	await shot('99-errore').catch(() => {})

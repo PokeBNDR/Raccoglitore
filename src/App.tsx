@@ -23,6 +23,9 @@ export function App() {
 	} else if (page === 'carta' && a && b) {
 		view = <CardView key={`${a}:${b}`} catalog={asCatalog(a)} id={b} />
 		tab = 'cerca'
+	} else if (page === 'prodotto' && a) {
+		view = <CardView key={`sealed:${a}`} catalog="sealed" id={a} />
+		tab = 'cerca'
 	} else if (page === 'set' && a && b) {
 		view = <SetView key={`${a}:${b}`} catalog={asCatalog(a)} id={b} />
 		tab = 'set'

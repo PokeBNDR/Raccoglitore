@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CardImage } from '../components/CardImage'
 import { LineChart } from '../components/Chart'
 import { DotHalo, DotText, TriGlyph, dotNumber } from '../components/Dots'
 import { HoldingChips, PricePanel, ValueFormula } from '../components/HoldingBits'
 import { HoldingForm } from '../components/HoldingForm'
 import { IconArrowOut, IconBack, IconCopy, IconEdit, IconTrash } from '../components/Icons'
+import { ItemImage } from '../components/SealedArt'
 import { toast } from '../components/Toast'
 import { eur, eurTight, fmtDay, pct, signedEur } from '../lib/format'
-import { basisName, cardNumber, catalogName, condName, langName, shownName, titleSize } from '../lib/labels'
+import { getCard } from '../lib/cards'
+import { basisName, cardNumber, catalogName, condName, isAsian, langName, shownName, titleSize } from '../lib/labels'
 import { cardmarketUrl, ebaySoldUrl, namedOf } from '../lib/links'
 import { cardKey, pickVariant, unitValue } from '../lib/pricing'
 import { back, href } from '../lib/router'
 import { putCard, removeHolding, useStore } from '../lib/store'
-import { getCard } from '../lib/tcgdex'
 
 /** One entry of the collection: what the copy is, what it is worth and why. */
 export function HoldingView({ id }: { id: string }) {
@@ -75,6 +75,7 @@ export function HoldingView({ id }: { id: string }) {
 		)
 	}
 
+	const sealed = h.catalog === 'sealed'
 	const unit = unitValue(h, card, settings)
 	const variant = pickVariant(card, h)
 	const total = unit.value == null ? null : unit.value * h.qty
@@ -98,18 +99,36 @@ export function HoldingView({ id }: { id: string }) {
 			<main className="page">
 				<section className="stage">
 					<div className="meta">
-						<a href={href('set', h.catalog, h.setId)}>{h.setName || h.setId}</a>
+						{h.catalog === 'sealed' ? (
+							h.setId && h.sealed?.setCatalog ? (
+								<a href={href('set', h.sealed.setCatalog, h.setId)}>{h.setName || h.setId}</a>
+							) : (
+								<span>{h.setName}</span>
+							)
+						) : (
+							<a href={href('set', h.catalog, h.setId)}>{h.setName || h.setId}</a>
+						)}
 						<span className="small muted num">{[cardNumber(h.localId, h.setOfficial), h.rarity].filter(Boolean).join(' · ')}</span>
 						<HoldingChips h={h} unit={unit} />
 					</div>
 					<div className="picture">
 						<DotHalo />
-						<CardImage images={card?.images ?? h.images} lang={h.lang} catalog={h.catalog} quality="high" alt={h.name} hero eager />
+						<ItemImage
+							catalog={h.catalog}
+							sealed={h.sealed}
+							kind={h.rarity}
+							images={card?.images ?? h.images}
+							lang={h.lang}
+							quality="high"
+							alt={h.name}
+							hero
+							eager
+						/>
 					</div>
 					<div className="metric">
 						<DotText text={dotNumber(total)} testId="holding-value" label={eur(total)} />
 						<span className="unit">
-							Euro{h.qty > 1 && unit.value != null ? ` · ${eur(unit.value)} l’una` : ''}
+							Euro{h.qty > 1 && unit.value != null ? ` · ${eur(unit.value)} ${sealed ? 'l’uno' : 'l’una'}` : ''}
 						</span>
 					</div>
 					{pl != null ? (
@@ -123,7 +142,7 @@ export function HoldingView({ id }: { id: string }) {
 					<div className="trio num">
 						<div>
 							<b>{eurTight(h.buyPrice)}</b>
-							<span>pagata{h.qty > 1 ? ', l’una' : ''}</span>
+							<span>{sealed ? `pagato${h.qty > 1 ? ', l’uno' : ''}` : `pagata${h.qty > 1 ? ', l’una' : ''}`}</span>
 						</div>
 						<div>
 							<TriGlyph />
@@ -147,7 +166,7 @@ export function HoldingView({ id }: { id: string }) {
 							<IconCopy />
 						</button>
 						<button className="btn cta" type="button" disabled={!card} onClick={() => setSheet('edit')}>
-							Modifica la copia
+							{sealed ? 'Modifica il prodotto' : 'Modifica la copia'}
 							<span className="knob">
 								<IconEdit />
 							</span>
@@ -167,25 +186,31 @@ export function HoldingView({ id }: { id: string }) {
 						</div>
 						<p className="small muted center">
 							Cardmarket si apre sulle offerte in {langName(h.lang).toLowerCase()}
-							{h.grade ? '' : `, ${condName(h.cond)} o meglio`}; eBay sulle vendite concluse di questa carta. Se il prezzo
-							reale è diverso, scrivilo in «Modifica» come «Prezzo tuo».
+							{h.grade || sealed ? '' : `, ${condName(h.cond)} o meglio`}; eBay sulle vendite concluse di{' '}
+							{sealed ? 'questo prodotto' : 'questa carta'}. Se il prezzo reale è diverso, scrivilo in «Modifica» come «Prezzo
+							tuo».
 						</p>
 					</section>
 				) : null}
 
 				{points.length >= 2 ? (
 					<section className="glass t-graphite quiet panel">
-						<h3>Valore di una copia nel tempo</h3>
-						<LineChart points={points} height={96} label="Valore di una copia nel tempo" />
+						<h3>{sealed ? 'Valore di un pezzo nel tempo' : 'Valore di una copia nel tempo'}</h3>
+						<LineChart points={points} height={96} label={sealed ? 'Valore di un pezzo nel tempo' : 'Valore di una copia nel tempo'} />
 					</section>
 				) : null}
 
 				<section className="glass t-graphite quiet panel">
-					<h3>La tua copia</h3>
+					<h3>{sealed ? 'Il tuo prodotto' : 'La tua copia'}</h3>
 					<dl className="kv num">
 						<dt>Lingua</dt>
 						<dd>{langName(h.lang)}</dd>
-						{h.grade ? (
+						{sealed ? (
+							<>
+								<dt>Tipo</dt>
+								<dd>{h.rarity || 'Prodotto sigillato'}</dd>
+							</>
+						) : h.grade ? (
 							<>
 								<dt>Gradazione</dt>
 								<dd>
@@ -200,16 +225,20 @@ export function HoldingView({ id }: { id: string }) {
 								</dd>
 							</>
 						)}
-						<dt>Versione</dt>
-						<dd>{h.variantLabel}</dd>
+						{sealed ? null : (
+							<>
+								<dt>Versione</dt>
+								<dd>{h.variantLabel}</dd>
+							</>
+						)}
 						<dt>Quantità</dt>
 						<dd>{h.qty}</dd>
-						<dt>Pagata</dt>
+						<dt>{sealed ? 'Pagato' : 'Pagata'}</dt>
 						<dd>
-							{h.buyPrice != null ? `${eur(h.buyPrice)}${h.qty > 1 ? ' l’una' : ''}` : '—'}
+							{h.buyPrice != null ? `${eur(h.buyPrice)}${h.qty > 1 ? (sealed ? ' l’uno' : ' l’una') : ''}` : '—'}
 							{h.buyDate ? ` · ${fmtDay(h.buyDate, true)}` : ''}
 						</dd>
-						{h.catalog !== 'int' ? (
+						{isAsian(h.catalog) ? (
 							<>
 								<dt>Catalogo</dt>
 								<dd>{catalogName(h.catalog)}</dd>
@@ -226,12 +255,14 @@ export function HoldingView({ id }: { id: string }) {
 
 				{card ? <PricePanel card={card} activeKey={variant?.key} basis={settings.basis} /> : null}
 				{missing && !card ? (
-					<div className="notice warn">Non riesco a caricare i prezzi di questa carta. Riprova quando sei online.</div>
+					<div className="notice warn">
+						Non riesco a caricare i prezzi di {sealed ? 'questo prodotto' : 'questa carta'}. Riprova quando sei online.
+					</div>
 				) : null}
 
 				<div className="hstack" style={{ justifyContent: 'space-between' }}>
-					<a className="btn ghost small" href={href('carta', h.catalog, h.cardId)}>
-						Scheda della carta
+					<a className="btn ghost small" href={sealed ? href('prodotto', h.cardId) : href('carta', h.catalog, h.cardId)}>
+						{sealed ? 'Scheda del prodotto' : 'Scheda della carta'}
 					</a>
 					<button
 						className="btn ghost small danger"

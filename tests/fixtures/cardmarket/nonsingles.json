@@ -1,0 +1,132 @@
+{
+ "version": 1,
+ "createdAt": "2026-10-06T13:31:04+0200",
+ "products": [
+  {
+   "idProduct": 271439,
+   "name": "Phantom Forces Booster",
+   "idCategory": 52,
+   "categoryName": "Pokémon Booster",
+   "idExpansion": 1521,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 271440,
+   "name": "Phantom Forces Booster Box",
+   "idCategory": 53,
+   "categoryName": "Pokémon Display",
+   "idExpansion": 1521,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 271823,
+   "name": "Base Set Booster",
+   "idCategory": 52,
+   "categoryName": "Pokémon Booster",
+   "idExpansion": 1523,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 271824,
+   "name": "Base Set Booster Box",
+   "idCategory": 53,
+   "categoryName": "Pokémon Display",
+   "idExpansion": 1523,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 271825,
+   "name": "Black & White Booster",
+   "idCategory": 52,
+   "categoryName": "Pokémon Booster",
+   "idExpansion": 1571,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733900,
+   "name": "151 Booster Bundle",
+   "idCategory": 1015,
+   "categoryName": "Pokémon Box Set",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733901,
+   "name": "151 Elite Trainer Box",
+   "idCategory": 1016,
+   "categoryName": "Pokémon Elite Trainer Boxes",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733902,
+   "name": "151 Ultra-Premium Collection",
+   "idCategory": 1015,
+   "categoryName": "Pokémon Box Set",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733903,
+   "name": "151 Booster",
+   "idCategory": 52,
+   "categoryName": "Pokémon Booster",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733904,
+   "name": "151 Mini Tin",
+   "idCategory": 1014,
+   "categoryName": "Pokémon Tins",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 826500,
+   "name": "Destined Rivals Booster Box",
+   "idCategory": 53,
+   "categoryName": "Pokémon Display",
+   "idExpansion": 6030,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 826501,
+   "name": "Destined Rivals Elite Trainer Box",
+   "idCategory": 1016,
+   "categoryName": "Pokémon Elite Trainer Boxes",
+   "idExpansion": 6030,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 900001,
+   "name": "Pikachu V Box",
+   "idCategory": 1015,
+   "categoryName": "Pokémon Box Set",
+   "idExpansion": 7777,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 900002,
+   "name": "Trainer's Toolkit 2023",
+   "idCategory": 1015,
+   "categoryName": "Pokémon Box Set",
+   "idExpansion": 7778,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  }
+ ]
+}

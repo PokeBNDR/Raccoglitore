@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
-import { CardImage } from '../components/CardImage'
 import { LineChart, type Point } from '../components/Chart'
 import { Deck } from '../components/Deck'
 import { DotBar, DotHalo, DotText, DottedArcs, MiniArcs, Scale, dotNumber } from '../components/Dots'
 import { HoldingChips } from '../components/HoldingBits'
 import { IconClose, IconPlus, IconSearch, IconSwap } from '../components/Icons'
+import { ItemImage } from '../components/SealedArt'
 import { dayStr, eur, fmtDay, fold, pct, signedEur } from '../lib/format'
 import { CONDS, LANGS, cardNumber, shownName } from '../lib/labels'
 import { cardKey, totals, unitValue, type UnitResult } from '../lib/pricing'
@@ -114,7 +114,12 @@ export function PortfolioView() {
 		const list = rows.filter(
 			(r) =>
 				(!lang || r.h.lang === lang) &&
-				(!cond || (cond === 'GRADED' ? !!r.h.grade : !r.h.grade && r.h.cond === cond)) &&
+				(!cond ||
+					(cond === 'SEALED'
+						? r.h.catalog === 'sealed'
+						: cond === 'GRADED'
+							? !!r.h.grade
+							: !r.h.grade && r.h.catalog !== 'sealed' && r.h.cond === cond)) &&
 				(!fq ||
 					fold([r.h.name, r.h.nameAlt ?? '', r.h.setName, r.h.localId, r.h.note].join(' ')).includes(fq)),
 		)
@@ -132,8 +137,9 @@ export function PortfolioView() {
 	}, [rows, q, lang, cond, sort])
 
 	const langsUsed = LANGS.filter((l) => holdings.some((h) => h.lang === l.code))
-	const condsUsed = CONDS.filter((c) => holdings.some((h) => !h.grade && h.cond === c.code))
+	const condsUsed = CONDS.filter((c) => holdings.some((h) => !h.grade && h.catalog !== 'sealed' && h.cond === c.code))
 	const anyGraded = holdings.some((h) => h.grade)
+	const anySealed = holdings.some((h) => h.catalog === 'sealed')
 	const filtered = !!(q || lang || cond)
 	const backupOld = holdings.length >= 5 && (!lastBackup || Date.now() - lastBackup > 21 * 24 * 3_600_000)
 	const move = market.a30 > 0 ? ((market.a7 - market.a30) / market.a30) * 100 : null
@@ -167,7 +173,7 @@ export function PortfolioView() {
 					<span />
 				)}
 				<h1>Portfolio</h1>
-				<a className="iconbtn" href={href('cerca')} aria-label="Aggiungi una carta" title="Aggiungi una carta">
+				<a className="iconbtn" href={href('cerca')} aria-label="Aggiungi una carta o un prodotto" title="Aggiungi una carta o un prodotto">
 					<IconPlus />
 				</a>
 			</header>
@@ -191,7 +197,10 @@ export function PortfolioView() {
 						{ready ? (
 							<div className="empty">
 								<h2>La tua collezione parte da qui</h2>
-								<p>Cerca una carta, scegli lingua e condizione della tua copia e il valore si calcola da solo.</p>
+								<p>
+									Cerca una carta, scegli lingua e condizione della tua copia e il valore si calcola da solo. Puoi aggiungere anche
+									buste, box e altri prodotti sigillati.
+								</p>
 								<a className="btn primary" href={href('cerca')}>
 									<IconSearch /> Cerca una carta
 								</a>
@@ -356,11 +365,11 @@ export function PortfolioView() {
 
 						<div className="tiles">
 							<article className="glass t-graphite tile-card tall">
-								<h3>Carte</h3>
+								<h3>{anySealed ? 'Collezione' : 'Carte'}</h3>
 								<div className="push">
 									<div className="inline-metric">
 										<DotText text={String(t.copies)} pitch={3.1} />
-										<span className="unit">{t.copies === 1 ? 'copia' : 'copie'}</span>
+										<span className="unit">{anySealed ? (t.copies === 1 ? 'pezzo' : 'pezzi') : t.copies === 1 ? 'copia' : 'copie'}</span>
 									</div>
 									<DotBar parts={langs} />
 									<span className="minilegend num">
@@ -416,7 +425,7 @@ export function PortfolioView() {
 						) : null}
 
 						<div className="sectionhead">
-							<h2>Le tue carte</h2>
+							<h2>{anySealed ? 'La tua collezione' : 'Le tue carte'}</h2>
 							<span className="small muted num">
 								{filtered
 									? `${shown.length} di ${rows.length} · ${eur(shown.reduce((s, r) => s + (r.total ?? 0), 0))}`
@@ -459,6 +468,7 @@ export function PortfolioView() {
 										</option>
 									))}
 									{anyGraded ? <option value="GRADED">Gradate</option> : null}
+									{anySealed ? <option value="SEALED">Sigillati</option> : null}
 								</select>
 								<select id="pf-sort" aria-label="Ordina" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
 									<option value="value">Valore</option>
@@ -471,12 +481,12 @@ export function PortfolioView() {
 						</div>
 
 						{!shown.length ? (
-							<div className="empty">Nessuna carta corrisponde a questi filtri.</div>
+							<div className="empty">Niente corrisponde a questi filtri.</div>
 						) : grid ? (
 							<div className="grid">
 								{shown.slice(0, limit).map((r) => (
 									<a className="tile" key={r.h.id} href={href('copia', r.h.id)}>
-										<CardImage images={r.h.images} lang={r.h.lang} catalog={r.h.catalog} alt={r.h.name} />
+										<ItemImage catalog={r.h.catalog} sealed={r.h.sealed} kind={r.h.rarity} images={r.h.images} lang={r.h.lang} alt={r.h.name} />
 										{r.h.qty > 1 ? <span className="badge">×{r.h.qty}</span> : null}
 										<span className="t-price num">{eur(r.total)}</span>
 										<HoldingChips h={{ ...r.h, qty: 1 }} compact />
@@ -488,11 +498,13 @@ export function PortfolioView() {
 								{shown.slice(0, limit).map((r) => (
 									<li key={r.h.id}>
 										<a className="row" href={href('copia', r.h.id)}>
-											<CardImage images={r.h.images} lang={r.h.lang} catalog={r.h.catalog} alt="" />
+											<ItemImage catalog={r.h.catalog} sealed={r.h.sealed} kind={r.h.rarity} images={r.h.images} lang={r.h.lang} alt="" />
 											<span className="mid">
 												<span className="name">{shownName(r.h)}</span>
 												<span className="sub">
-													{r.h.setName} · {cardNumber(r.h.localId, r.h.setOfficial)}
+													{r.h.catalog === 'sealed'
+														? [r.h.setName, r.h.rarity].filter(Boolean).join(' · ')
+														: `${r.h.setName} · ${cardNumber(r.h.localId, r.h.setOfficial)}`}
 												</span>
 												<HoldingChips h={r.h} unit={r.unit} />
 											</span>
@@ -501,7 +513,9 @@ export function PortfolioView() {
 												{r.pl != null ? (
 													<span className={'pl ' + (r.pl >= 0 ? 'up' : 'down')}>{signedEur(r.pl)}</span>
 												) : r.h.qty > 1 && r.unit.value != null ? (
-													<span className="pl muted">{eur(r.unit.value)} l’una</span>
+													<span className="pl muted">
+														{eur(r.unit.value)} {r.h.catalog === 'sealed' ? 'l’uno' : 'l’una'}
+													</span>
 												) : null}
 											</span>
 										</a>

@@ -1,10 +1,14 @@
-# Publishes the app to GitHub Pages every time the main branch changes.
+# Publishes the app to GitHub Pages every time the main branch changes, and once a day.
 # One-time setup in the repository: Settings → Pages → Source: "GitHub Actions".
 name: Pubblica
 
 on:
   push:
     branches: [main]
+  # Every morning, after Cardmarket has published the day's price list: the prices of the sealed
+  # products are read again and the site is published with them.
+  schedule:
+    - cron: '40 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +32,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Sealed products and their prices, from Cardmarket's public files, written to
+      # public/data/sealed.json. If Cardmarket cannot be reached the file already online is kept.
+      - name: Prodotti sigillati
+        run: PREVIOUS_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/data/sealed.json" node scripts/build-sealed.mjs
       - run: npm run build
       - uses: actions/upload-pages-artifact@v5
         with:

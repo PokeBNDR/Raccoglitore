@@ -1,0 +1,69 @@
+{
+ "version": 1,
+ "createdAt": "2026-10-06T13:31:04+0200",
+ "products": [
+  {
+   "idProduct": 825875,
+   "name": "Ethan's Pinsir",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 6030,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 825997,
+   "name": "Card",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 6030,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 826118,
+   "name": "Card",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 6030,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 273696,
+   "name": "Alakazam",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 1523,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 273747,
+   "name": "Card",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 1523,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 273797,
+   "name": "Card",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 1523,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 660227,
+   "name": "Alakazam",
+   "idCategory": 51,
+   "categoryName": "Pokémon Single",
+   "idExpansion": 1524,
+   "idMetacard": 1,
+   "dateAdded": "2007-01-01 00:00:00"
+  }
+ ]
+}

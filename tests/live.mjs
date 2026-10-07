@@ -62,6 +62,20 @@ try {
 	}
 	const logo = await fetch(`${last?.logo ?? sets.data?.find((s) => s.logo)?.logo}.webp`)
 	ok('logo di un set', logo.ok, String(logo.status))
+
+	// Sealed products: Cardmarket's own public files, read when the site is built.
+	const CM = 'https://downloads.s3.cardmarket.com/productCatalog'
+	const sealed = await (await fetch(`${CM}/productList/products_nonsingles_6.json`)).json()
+	const first = sealed.products?.[0]
+	ok(
+		'Cardmarket: elenco dei prodotti sigillati',
+		Array.isArray(sealed.products) && sealed.products.length > 500 && typeof first?.idProduct === 'number' && typeof first?.idExpansion === 'number' && !!first?.categoryName,
+		`${sealed.products?.length} prodotti, ad esempio «${first?.name}» (${first?.categoryName})`,
+	)
+	const guide = await (await fetch(`${CM}/priceGuide/price_guide_6.json`)).json()
+	const sample = new Set((sealed.products ?? []).slice(0, 300).map((p) => p.idProduct))
+	const withPrice = (guide.priceGuides ?? []).filter((g) => sample.has(g.idProduct) && (num(g.trend) || num(g.avg))).length
+	ok('Cardmarket: il listino ha i prezzi dei sigillati', withPrice > 100, `${withPrice} dei primi 300 con un prezzo, listino del ${guide.createdAt}`)
 } catch (err) {
 	ok('collegamento al catalogo', false, String(err?.message ?? err))
 }

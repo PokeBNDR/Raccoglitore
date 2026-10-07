@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { MultInput } from '../components/MultInput'
 import { toast } from '../components/Toast'
-import { dayStr, fmtWhen, numToInput, ofWhen, parseNum } from '../lib/format'
+import { dayStr, fmtWhen, ofWhen } from '../lib/format'
 import { BASIS, CONDS, DEFAULT_SETTINGS, LANGS } from '../lib/labels'
 import {
 	exportData,
@@ -13,7 +14,7 @@ import {
 	useStore,
 	wipeAll,
 } from '../lib/store'
-import { loadCard } from '../lib/tcgdex'
+import { loadCard } from '../lib/cards'
 import type { Cond, LangCode, PriceBasis } from '../lib/types'
 
 declare const __BUILD_TIME__: string
@@ -39,36 +40,6 @@ const EBAY_SITES = [
 	['www.ebay.co.uk', 'eBay Regno Unito'],
 	['www.ebay.com', 'eBay USA'],
 ]
-
-/** A multiplier field that keeps what is being typed and saves only valid numbers. */
-function MultInput({ id, label, value, onSave }: { id: string; label: string; value: number; onSave: (n: number) => void }) {
-	const [text, setText] = useState(numToInput(value))
-	const [focus, setFocus] = useState(false)
-	useEffect(() => {
-		if (!focus) setText(numToInput(value))
-	}, [value, focus])
-	const n = parseNum(text)
-	const bad = n == null || Number.isNaN(n) || n > 100
-	return (
-		<div className="field">
-			<label htmlFor={id}>{label}</label>
-			<input
-				id={id}
-				inputMode="decimal"
-				value={text}
-				aria-invalid={bad}
-				style={bad ? { borderColor: 'var(--down)' } : undefined}
-				onFocus={() => setFocus(true)}
-				onBlur={() => setFocus(false)}
-				onChange={(e) => {
-					setText(e.target.value)
-					const v = parseNum(e.target.value)
-					if (v != null && !Number.isNaN(v) && v <= 100) onSave(v)
-				}}
-			/>
-		</div>
-	)
-}
 
 export function SettingsView() {
 	const settings = useStore((s) => s.settings)
@@ -199,7 +170,7 @@ export function SettingsView() {
 					</div>
 					<p className="small muted">
 						Valore di una copia = prezzo Cardmarket × condizione × lingua. Un «Prezzo tuo» scritto sulla copia sostituisce il
-						calcolo. Per le gradate la condizione non conta.
+						calcolo. Per le gradate e per i prodotti sigillati la condizione non conta.
 					</p>
 					<div className="hstack" style={{ justifyContent: 'space-between' }}>
 						<span className="small muted">
@@ -248,8 +219,9 @@ export function SettingsView() {
 						</button>
 					</div>
 					<p className="small muted">
-						Partono tutte da 1, cioè nessuna correzione. Scrivi 0,7 se nella tua esperienza una lingua vale il 30% in meno
-						del prezzo Cardmarket, 1,5 se vale la metà in più.
+						Cardmarket pubblica un solo prezzo per tutte le lingue, quindi partono tutte da 1, cioè nessuna correzione. Scrivi
+						0,7 se nella tua esperienza una lingua vale il 30% in meno del prezzo Cardmarket, 1,5 se vale la metà in più. Le
+						carte giapponesi, coreane e cinesi hanno invece un loro listino: prendile dal loro catalogo.
 					</p>
 					<div className="mults">
 						{LANGS.map((l) => (
@@ -368,8 +340,9 @@ export function SettingsView() {
 					<h2>Da dove arrivano i dati</h2>
 					<p className="small muted">
 						Catalogo e immagini: <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, un
-						database aperto. Prezzi: il listino che Cardmarket pubblica ogni giorno, letto tramite TCGdex. I prezzi sono
-						indicativi e non sostituiscono una valutazione.
+						database aperto. Prezzi: il listino che Cardmarket pubblica ogni giorno, letto tramite TCGdex. Prodotti sigillati:
+						elenco e prezzi dai file pubblici di Cardmarket, riletti una volta al giorno. I prezzi sono indicativi e non
+						sostituiscono una valutazione.
 					</p>
 					<p className="small muted">
 						Raccoglitore è un progetto personale, non affiliato a The Pokémon Company, Nintendo, Cardmarket o eBay.

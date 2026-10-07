@@ -16,7 +16,7 @@ export function cardmarketUrl(card: CardInfo, copy?: Copy): string {
 	if (copy) {
 		const lang = LANGS.find((l) => l.code === copy.lang)
 		if (lang) p.set('language', lang.cm.join(','))
-		if (!copy.grade) {
+		if (!copy.grade && card.catalog !== 'sealed') {
 			const cond = CONDS.find((c) => c.code === copy.cond)
 			if (cond) p.set('minCondition', String(cond.cm))
 		}
@@ -27,7 +27,7 @@ export function cardmarketUrl(card: CardInfo, copy?: Copy): string {
 }
 
 export function cardmarketSearchUrl(card: Pick<CardInfo, 'name' | 'nameAlt' | 'catalog'>): string {
-	const q = card.catalog === 'int' ? (card.nameAlt ?? card.name) : (card.nameAlt ?? card.name)
+	const q = card.nameAlt ?? card.name
 	return `https://www.cardmarket.com/it/Pokemon/Products/Search?searchString=${encodeURIComponent(q)}`
 }
 

@@ -1,22 +1,26 @@
 import { useState } from 'react'
-import { CardImage } from '../components/CardImage'
 import { DotHalo, DotText, Scale, TriGlyph, dotNumber } from '../components/Dots'
 import { HoldingChips, PricePanel } from '../components/HoldingBits'
 import { HoldingForm } from '../components/HoldingForm'
 import { IconArrowOut, IconBack, IconPlus, IconSwap } from '../components/Icons'
+import { ItemImage } from '../components/SealedArt'
 import { toast } from '../components/Toast'
 import { eur, eurTight, pct } from '../lib/format'
+import { loadCard } from '../lib/cards'
 import { useCard } from '../lib/hooks'
-import { basisName, cardNumber, catalogName, shownName, titleSize, variantLabel } from '../lib/labels'
+import { basisName, cardNumber, catalogName, isAsian, shownName, titleSize, variantLabel } from '../lib/labels'
 import { cardmarketUrl, ebaySoldUrl, namedOf } from '../lib/links'
 import { basePrice, cardKey, figure, priceSource, unitValue } from '../lib/pricing'
 import { back, href } from '../lib/router'
 import { putCard, useStore } from '../lib/store'
-import { defaultVariant, loadCard } from '../lib/tcgdex'
-import type { Catalog } from '../lib/types'
+import { defaultVariant } from '../lib/tcgdex'
+import type { Source } from '../lib/types'
 
-/** A card of the catalogue: picture, Cardmarket prices of every version, and the button to add it. */
-export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
+/**
+ * A card of the catalogue, or a sealed product: picture, Cardmarket prices of every version,
+ * and the button to add it to the collection.
+ */
+export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 	const res = useCard(catalog, id)
 	const settings = useStore((s) => s.settings)
 	const holdings = useStore((s) => s.holdings)
@@ -24,6 +28,7 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 	const [adding, setAdding] = useState(false)
 	const [busy, setBusy] = useState(false)
 	const card = res.data
+	const sealed = catalog === 'sealed'
 	const mine = holdings.filter((h) => h.catalog === catalog && h.cardId.toLowerCase() === id.toLowerCase())
 
 	const main = card ? defaultVariant(card) : undefined
@@ -54,7 +59,7 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 				<button className="iconbtn" type="button" aria-label="Indietro" onClick={() => back(href('cerca'))}>
 					<IconBack />
 				</button>
-				<h1 style={{ fontSize: card ? titleSize(shownName(card)) : undefined }}>{card ? shownName(card) : 'Carta'}</h1>
+				<h1 style={{ fontSize: card ? titleSize(shownName(card)) : undefined }}>{card ? shownName(card) : sealed ? 'Prodotto' : 'Carta'}</h1>
 				{card ? (
 					<a
 						className="iconbtn"
@@ -82,7 +87,7 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 				) : null}
 				{res.error && !card ? (
 					<div className="empty">
-						<p>Non riesco a caricare questa carta. Controlla la connessione e riprova.</p>
+						<p>Non riesco a caricare {sealed ? 'questo prodotto' : 'questa carta'}. Controlla la connessione e riprova.</p>
 						<button className="btn" type="button" onClick={res.reload}>
 							Riprova
 						</button>
@@ -90,9 +95,9 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 				) : null}
 				{!res.loading && !res.error && card === null ? (
 					<div className="empty">
-						<p>Questa carta non è più nel catalogo.</p>
+						<p>{sealed ? 'Questo prodotto non è nell’elenco di Cardmarket.' : 'Questa carta non è più nel catalogo.'}</p>
 						<a className="btn" href={href('cerca')}>
-							Cerca una carta
+							{sealed ? 'Cerca un prodotto' : 'Cerca una carta'}
 						</a>
 					</div>
 				) : null}
@@ -101,12 +106,21 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 					<>
 						<section className="stage">
 							<div className="meta">
-								<a href={href('set', card.catalog, card.set.id)}>{card.set.name || card.set.id}</a>
+								{card.catalog === 'sealed' ? (
+									card.set.id && card.sealed?.setCatalog ? (
+										<a href={href('set', card.sealed.setCatalog, card.set.id)}>{card.set.name || card.set.id}</a>
+									) : (
+										<span>{card.set.name}</span>
+									)
+								) : (
+									<a href={href('set', card.catalog, card.set.id)}>{card.set.name || card.set.id}</a>
+								)}
 								<span className="small muted num">
 									{[
 										cardNumber(card.localId, card.set.official),
 										card.rarity,
-										card.catalog !== 'int' ? `catalogo ${catalogName(card.catalog).toLowerCase()}` : '',
+										card.catalog === 'sealed' ? 'prodotto sigillato' : '',
+										isAsian(card.catalog) ? `catalogo ${catalogName(card.catalog).toLowerCase()}` : '',
 									]
 										.filter(Boolean)
 										.join(' · ')}
@@ -114,7 +128,16 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 							</div>
 							<div className="picture">
 								<DotHalo />
-								<CardImage images={card.images} catalog={card.catalog} quality="high" alt={card.name} hero eager />
+								<ItemImage
+									catalog={card.catalog}
+									sealed={card.sealed}
+									kind={card.rarity}
+									images={card.images}
+									quality="high"
+									alt={card.name}
+									hero
+									eager
+								/>
 							</div>
 							<div className="metric">
 								<DotText text={dotNumber(base?.value)} testId="card-price" label={eur(base?.value)} />
@@ -139,7 +162,9 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 								</div>
 								<div>
 									<TriGlyph />
-									<span className="mid-text">{main && card.variants.length > 1 ? variantLabel(main) : 'Prezzo di una copia'}</span>
+									<span className="mid-text">
+										{sealed ? 'Prezzo di un pezzo' : main && card.variants.length > 1 ? variantLabel(main) : 'Prezzo di una copia'}
+									</span>
 								</div>
 								<div>
 									<b>{eurTight(a30)}</b>
@@ -226,8 +251,8 @@ export function CardView({ catalog, id }: { catalog: Catalog; id: string }) {
 								</a>
 							</div>
 							<p className="small muted center">
-								Si aprono in un’altra scheda. Dalla tua copia, gli stessi pulsanti cercano quella esatta: stessa lingua e
-								condizione.
+								Si aprono in un’altra scheda. Dalla tua copia, gli stessi pulsanti cercano quella esatta: stessa lingua
+								{sealed ? '' : ' e condizione'}.
 							</p>
 						</section>
 

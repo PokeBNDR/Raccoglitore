@@ -5,10 +5,13 @@ import type { CardInfo, Holding, PriceBasis, VariantOpt } from '../lib/types'
 
 /** The small tags that say what a copy is: language, condition or grade, version, quantity. */
 export function HoldingChips({ h, unit, compact }: { h: Holding; unit?: UnitResult; compact?: boolean }) {
+	const sealed = h.catalog === 'sealed'
 	return (
 		<span className="chips">
 			<span className="chip">{h.lang}</span>
-			{h.grade ? (
+			{sealed ? (
+				<span className="chip seal">Sigillato</span>
+			) : h.grade ? (
 				<span className="chip accent">
 					{h.grade.company} {h.grade.value}
 				</span>
@@ -17,7 +20,7 @@ export function HoldingChips({ h, unit, compact }: { h: Holding; unit?: UnitResu
 					{h.cond}
 				</span>
 			)}
-			{!compact && h.variantLabel && h.variantLabel !== 'Normale' ? <span className="chip">{h.variantLabel}</span> : null}
+			{!sealed && !compact && h.variantLabel && h.variantLabel !== 'Normale' ? <span className="chip">{h.variantLabel}</span> : null}
 			{h.qty > 1 ? <span className="chip">×{h.qty}</span> : null}
 			{unit?.kind === 'manual' ? <span className="chip">Prezzo tuo</span> : null}
 			{unit?.kind === 'none' ? <span className="chip warn">Da prezzare</span> : null}
@@ -35,6 +38,7 @@ export function PricePanel({ card, activeKey, basis }: { card: CardInfo; activeK
 	const any = rows.some((r) => COLS.some((b) => figure(r.src, b) != null))
 	const updated = rows.find((r) => r.src.cm?.updated)?.src.cm?.updated ?? card.cm?.updated
 	const tcg = tcgLines(card)
+	const sealed = card.catalog === 'sealed'
 	return (
 		<section className="glass t-graphite quiet panel">
 			<div className="hstack" style={{ justifyContent: 'space-between' }}>
@@ -63,12 +67,14 @@ export function PricePanel({ card, activeKey, basis }: { card: CardInfo; activeK
 				</div>
 			) : (
 				<p className="muted small">
-					Cardmarket non pubblica un prezzo per questa carta. Puoi inserire tu il prezzo della tua copia.
+					Cardmarket non pubblica un prezzo per {sealed ? 'questo prodotto' : 'questa carta'}. Puoi inserire tu il prezzo della tua
+					copia.
 				</p>
 			)}
 			<p className="small muted">
-				Cardmarket pubblica un solo listino per carta, senza distinguere lingua e condizione. Nel tuo portfolio il valore
-				parte da «{basisName(basis)}» e viene corretto con i tuoi moltiplicatori.
+				{sealed
+					? `Cardmarket pubblica un solo listino per prodotto, senza distinguere la lingua. Nel tuo portfolio il valore parte da «${basisName(basis)}» e viene corretto con il moltiplicatore della lingua.`
+					: `Cardmarket pubblica un solo listino per carta, senza distinguere lingua e condizione. Nel tuo portfolio il valore parte da «${basisName(basis)}» e viene corretto con i tuoi moltiplicatori.`}
 			</p>
 			{tcg.length ? (
 				<p className="small muted num">
@@ -114,8 +120,9 @@ export function ValueFormula({ h, unit, variant }: { h: Holding; unit: UnitResul
 	if (unit.kind === 'none') {
 		return (
 			<p className="small warn">
-				Cardmarket non ha un prezzo per {variant ? `la versione «${variantLabel(variant)}»` : 'questa carta'}: apri «Modifica» e
-				inserisci il prezzo della tua copia.
+				Cardmarket non ha un prezzo per{' '}
+				{h.catalog === 'sealed' ? 'questo prodotto' : variant ? `la versione «${variantLabel(variant)}»` : 'questa carta'}: apri
+				«Modifica» e inserisci il prezzo della tua copia.
 			</p>
 		)
 	}
@@ -127,10 +134,14 @@ export function ValueFormula({ h, unit, variant }: { h: Holding; unit: UnitResul
 				<span>
 					<b>{eur(b.value)}</b> <span className="muted">{b.basis ? basisName(b.basis) : ''}</span>
 				</span>
-				<span className="muted">×</span>
-				<span>
-					<b>{n(unit.condM)}</b> <span className="muted">{h.grade ? 'gradata' : h.cond}</span>
-				</span>
+				{h.catalog === 'sealed' ? null : (
+					<>
+						<span className="muted">×</span>
+						<span>
+							<b>{n(unit.condM)}</b> <span className="muted">{h.grade ? 'gradata' : h.cond}</span>
+						</span>
+					</>
+				)}
 				<span className="muted">×</span>
 				<span>
 					<b>{n(unit.langM)}</b> <span className="muted">{h.lang}</span>

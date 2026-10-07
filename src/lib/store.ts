@@ -4,8 +4,8 @@ import { limiter, onOffline, pruneCache } from './cache'
 import { dayStr, round2, uid } from './format'
 import { CONDS, DEFAULT_SETTINGS, LANGS } from './labels'
 import { cardKey, totals, unitValue } from './pricing'
-import { loadCard } from './tcgdex'
-import type { CardInfo, Catalog, Cond, Holding, LangCode, Settings, Snapshot } from './types'
+import { loadCard } from './cards'
+import type { CardInfo, Cond, Holding, LangCode, SealedRef, Settings, Snapshot, Source } from './types'
 
 export interface RefreshState {
 	running: boolean
@@ -143,6 +143,14 @@ function cleanSettings(raw: Partial<Settings> | undefined): Settings {
 const isCond = (v: unknown): v is Cond => CONDS.some((c) => c.code === v)
 const isLang = (v: unknown): v is LangCode => LANGS.some((l) => l.code === v)
 const numOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+const SOURCES: Source[] = ['int', 'ja', 'ko', 'zh-tw', 'zh-cn', 'sealed']
+
+function cleanSealed(raw: unknown): SealedRef | undefined {
+	if (!raw || typeof raw !== 'object') return undefined
+	const r = raw as Record<string, unknown>
+	const setCatalog = SOURCES.includes(r.setCatalog as Source) && r.setCatalog !== 'sealed' ? (r.setCatalog as SealedRef['setCatalog']) : undefined
+	return { cat: typeof r.cat === 'number' ? r.cat : 0, exp: typeof r.exp === 'number' ? r.exp : 0, setCatalog }
+}
 
 /** Makes a holding read from storage or from a backup file safe to use. */
 export function cleanHolding(raw: unknown): Holding | null {
@@ -157,9 +165,12 @@ export function cleanHolding(raw: unknown): Holding | null {
 					value: String((r.grade as Record<string, unknown>).value ?? ''),
 				}
 			: null
+	const catalog: Source = SOURCES.includes(r.catalog as Source) ? (r.catalog as Source) : 'int'
+	const sealed = catalog === 'sealed'
 	return {
 		id: typeof r.id === 'string' && r.id ? r.id : uid(),
-		catalog: (['int', 'ja', 'ko', 'zh-tw', 'zh-cn'].includes(r.catalog as string) ? r.catalog : 'int') as Catalog,
+		catalog,
+		...(sealed ? { sealed: cleanSealed(r.sealed) ?? { cat: 0, exp: 0 } } : {}),
 		cardId: r.cardId,
 		name: r.name,
 		nameAlt: typeof r.nameAlt === 'string' ? r.nameAlt : undefined,
@@ -171,11 +182,11 @@ export function cleanHolding(raw: unknown): Holding | null {
 		rarity: typeof r.rarity === 'string' ? r.rarity : undefined,
 		lang: isLang(r.lang) ? r.lang : 'IT',
 		cond: isCond(r.cond) ? r.cond : 'NM',
-		variantKey: typeof r.variantKey === 'string' ? r.variantKey : 'normal|||',
-		variantType: typeof r.variantType === 'string' ? r.variantType : 'normal',
-		variantLabel: typeof r.variantLabel === 'string' ? r.variantLabel : 'Normale',
+		variantKey: typeof r.variantKey === 'string' ? r.variantKey : sealed ? 'sealed' : 'normal|||',
+		variantType: typeof r.variantType === 'string' ? r.variantType : sealed ? 'sealed' : 'normal',
+		variantLabel: typeof r.variantLabel === 'string' ? r.variantLabel : sealed ? 'Sigillato' : 'Normale',
 		stamps: Array.isArray(r.stamps) ? r.stamps.filter((s): s is string => typeof s === 'string') : [],
-		grade,
+		grade: sealed ? null : grade,
 		qty: typeof r.qty === 'number' && r.qty >= 1 ? Math.floor(r.qty) : 1,
 		buyPrice: numOrNull(r.buyPrice),
 		buyDate: typeof r.buyDate === 'string' && r.buyDate ? r.buyDate : null,
@@ -359,7 +370,7 @@ const runLimited = limiter(4)
 export async function refreshPrices(opts: { force?: boolean } = {}) {
 	if (!state.ready || state.refresh.running) return
 	const now = Date.now()
-	const wanted = new Map<string, { catalog: Catalog; id: string }>()
+	const wanted = new Map<string, { catalog: Source; id: string }>()
 	for (const h of state.holdings) {
 		const key = cardKey(h)
 		const have = state.cards[key]
@@ -444,7 +455,7 @@ export function importData(raw: unknown, mode: 'replace' | 'merge'): { added: nu
 		throw new Error('Questo file non è un backup di Raccoglitore.')
 	}
 	const incoming = file.holdings.map(cleanHolding).filter((h): h is Holding => !!h)
-	if (file.holdings.length && !incoming.length) throw new Error('Il backup non contiene carte leggibili.')
+	if (file.holdings.length && !incoming.length) throw new Error('Il backup non contiene voci leggibili.')
 	if (mode === 'replace') {
 		setState({
 			holdings: incoming,

@@ -88,7 +88,8 @@ export interface UnitResult {
 
 export function unitValue(h: Holding, card: CardInfo | undefined, s: Settings, basis: PriceBasis = s.basis): UnitResult {
 	const base = basePrice(card, pickVariant(card, h), basis)
-	const condM = h.grade ? 1 : (s.condMult[h.cond] ?? 1)
+	// A graded card and a sealed product have no condition to correct for.
+	const condM = h.grade || h.catalog === 'sealed' ? 1 : (s.condMult[h.cond] ?? 1)
 	const langM = s.langMult[h.lang] ?? 1
 	if (typeof h.manualPrice === 'number' && Number.isFinite(h.manualPrice)) {
 		return { value: h.manualPrice, kind: 'manual', base, condM, langM, gradedGuess: false }

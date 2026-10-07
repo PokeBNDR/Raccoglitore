@@ -11,6 +11,22 @@ export type Cond = 'MT' | 'NM' | 'EX' | 'GD' | 'LP' | 'PL' | 'PO'
  */
 export type Catalog = 'int' | 'ja' | 'ko' | 'zh-tw' | 'zh-cn'
 
+/**
+ * Where an entry of the collection comes from: one of the card catalogues, or `sealed` for the
+ * sealed products (booster boxes, tins…) listed by Cardmarket.
+ */
+export type Source = Catalog | 'sealed'
+
+/** What a sealed product is, in Cardmarket's terms. */
+export interface SealedRef {
+	/** Cardmarket category id (booster, display, tin…). */
+	cat: number
+	/** Cardmarket expansion id. */
+	exp: number
+	/** Catalogue of the set the expansion corresponds to, when there is one. */
+	setCatalog?: Catalog
+}
+
 /** Which Cardmarket figure is used as the starting price. */
 export type PriceBasis = 'trend' | 'avg1' | 'avg7' | 'avg30' | 'avg' | 'low'
 
@@ -45,10 +61,12 @@ export interface CardSetRef {
 	logo?: string
 }
 
-/** A catalogue card with prices, normalised from the API. */
+/** A catalogue card with prices, normalised from the API. A sealed product takes the same shape. */
 export interface CardInfo {
 	key: string
-	catalog: Catalog
+	catalog: Source
+	/** Present on sealed products only. */
+	sealed?: SealedRef
 	id: string
 	localId: string
 	/** Display name (Italian when it exists). */
@@ -104,10 +122,15 @@ export interface Grade {
 	value: string
 }
 
-/** One entry of the collection: a card in a given language, condition and version. */
+/**
+ * One entry of the collection: a card in a given language, condition and version,
+ * or a sealed product in a given language.
+ */
 export interface Holding {
 	id: string
-	catalog: Catalog
+	catalog: Source
+	/** Present on sealed products only. */
+	sealed?: SealedRef
 	cardId: string
 	name: string
 	nameAlt?: string

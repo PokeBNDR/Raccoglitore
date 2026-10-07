@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CardTile } from '../components/CardTile'
 import { IconBack, IconClose, IconSearch } from '../components/Icons'
-import { fmtDay, fold } from '../lib/format'
+import { SealedRow } from '../components/SealedArt'
+import { fmtDay, fold, ofWhen } from '../lib/format'
 import { useAsync } from '../lib/hooks'
 import { CATALOGS, catalogName, titleSize } from '../lib/labels'
 import { back, href } from '../lib/router'
+import { presetSearch } from '../lib/searchMemo'
+import { loadSealed, sealedOfSet } from '../lib/sealed'
 import { useStore } from '../lib/store'
 import { getSet, getSets, logoCandidates } from '../lib/tcgdex'
 import type { Catalog, SetBrief } from '../lib/types'
@@ -139,15 +142,24 @@ export function SetsView() {
 	)
 }
 
-type Show = 'all' | 'owned' | 'missing'
+type Show = 'all' | 'owned' | 'missing' | 'sealed'
+
+// Which list of a set was open, so that coming back from a card or a product shows the same one.
+const setMemo = { key: '', show: 'all' as Show }
 
 export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 	const set = useAsync(() => getSet(catalog, id), [catalog, id])
 	const owned = useOwnedBySet(catalog)
-	const [show, setShow] = useState<Show>('all')
+	const memoKey = `${catalog}:${id}`
+	const [show, setShow] = useState<Show>(setMemo.key === memoKey ? setMemo.show : 'all')
+	Object.assign(setMemo, { key: memoKey, show })
 	const [shown, setShown] = useState(90)
 	const mine = owned.get(id) ?? new Set<string>()
 	const data = set.data
+	// The list of sealed products is one file for all sets: a failure here must not hide the cards.
+	const sealed = useAsync(() => loadSealed().catch(() => null), [])
+	const index = sealed.data?.index ?? null
+	const products = useMemo(() => sealedOfSet(index, catalog, id), [index, catalog, id])
 
 	const cards = useMemo(() => {
 		const all = data?.cards ?? []
@@ -219,7 +231,8 @@ export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 								[
 									['all', 'Tutte'],
 									['owned', 'Che ho'],
-									['missing', 'Che mi mancano'],
+									['missing', 'Mancanti'],
+									['sealed', products.length ? `Sigillati ${products.length}` : 'Sigillati'],
 								] as Array<[Show, string]>
 							).map(([k, label]) => (
 								<button
@@ -236,7 +249,47 @@ export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 							))}
 						</div>
 
-						{!cards.length ? (
+						{show === 'sealed' ? (
+							sealed.loading && !sealed.data ? (
+								<div className="stack" aria-busy="true">
+									{Array.from({ length: 5 }, (_, i) => (
+										<div key={i} className="skel" style={{ height: 62 }} />
+									))}
+								</div>
+							) : products.length ? (
+								<>
+									<ul className="rows" data-testid="sealed-list">
+										{products.map((p, i) => (
+											<li key={p.id} className={i === 0 || products[i - 1].cat !== p.cat ? 'grouped' : undefined}>
+												{i === 0 || products[i - 1].cat !== p.cat ? <h3 className="grouphead">{p.kind.many}</h3> : null}
+												<SealedRow product={p} />
+											</li>
+										))}
+									</ul>
+									<p className="footnote">
+										Prodotti e prezzi di Cardmarket{index?.updated ? `, listino ${ofWhen(index.updated)}` : ''}. Un solo prezzo per
+										prodotto, senza distinguere la lingua.
+									</p>
+								</>
+							) : (
+								<div className="empty" data-testid="sealed-empty">
+									<p>
+										{index
+											? 'Non trovo prodotti sigillati collegati a questo set su Cardmarket. Prova a cercarli per nome.'
+											: 'L’elenco dei prodotti sigillati non è disponibile in questo momento.'}
+									</p>
+									{index ? (
+										<a
+											className="btn"
+											href={href('cerca')}
+											onClick={() => presetSearch('sealed', '')}
+										>
+											Cerca tra i sigillati
+										</a>
+									) : null}
+								</div>
+							)
+						) : !cards.length ? (
 							<div className="empty">
 								{show === 'owned' ? 'Non hai ancora carte di questo set.' : show === 'missing' ? 'Le hai tutte.' : 'Nessuna carta.'}
 							</div>
@@ -247,7 +300,7 @@ export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 								))}
 							</div>
 						)}
-						{cards.length > shown ? (
+						{show !== 'sealed' && cards.length > shown ? (
 							<button className="btn block" type="button" onClick={() => setShown((n) => n + 90)}>
 								Mostra altre {Math.min(90, cards.length - shown)}
 							</button>

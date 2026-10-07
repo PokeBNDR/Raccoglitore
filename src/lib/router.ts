@@ -84,6 +84,23 @@ export function nav(to: string, replace = false) {
 	}
 }
 
+/**
+ * Opens a page from inside a bottom sheet. Closing a sheet undoes its own history step a moment
+ * later: the new page is opened only after that, or the step back would land on the old page.
+ */
+export function navAfterSheet(to: string, close: () => void) {
+	let done = false
+	const go = () => {
+		if (done) return
+		done = true
+		window.removeEventListener('popstate', go)
+		nav(to)
+	}
+	window.addEventListener('popstate', go)
+	window.setTimeout(go, 300)
+	close()
+}
+
 /** Goes back when the previous page is inside the app, otherwise opens the fallback page. */
 export function back(fallback = '#/') {
 	if (stack.length > 1) window.history.back()

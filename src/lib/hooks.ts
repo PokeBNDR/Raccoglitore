@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { limiter } from './cache'
 import { getState, putCard } from './store'
-import { getCard, getCardLite } from './tcgdex'
-import type { CardInfo, Catalog } from './types'
+import { getCard, getCardLite } from './cards'
+import type { CardInfo, Source } from './types'
 
 export interface Async<T> {
 	data: T | undefined
@@ -35,7 +35,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): Async<T>
 }
 
 /** Full card for the detail pages. Keeps the collection's copy of the prices up to date as a side effect. */
-export function useCard(catalog: Catalog, id: string): Async<CardInfo | null> {
+export function useCard(catalog: Source, id: string): Async<CardInfo | null> {
 	const res = useAsync(async () => {
 		const card = await getCard(catalog, id)
 		if (card && getState().cards[card.key]) putCard(card)
@@ -51,7 +51,7 @@ const liteMem = new Map<string, CardInfo | null>()
  * Prices for a card shown in a grid. Loads only once the element is on screen,
  * a few at a time, so long lists do not flood the catalogue with requests.
  */
-export function useLazyCard(catalog: Catalog, id: string) {
+export function useLazyCard(catalog: Source, id: string) {
 	const key = `${catalog}:${id}`
 	const ref = useRef<HTMLElement | null>(null)
 	const [card, setCard] = useState<CardInfo | null | undefined>(() => getState().cards[key] ?? liteMem.get(key))

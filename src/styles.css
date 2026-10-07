@@ -1958,3 +1958,88 @@ button.tile-card {
 		scroll-behavior: auto !important;
 	}
 }
+
+/* ---------- sealed products ---------- */
+/* The picture of a sealed product is a drawing of its kind, traced in dots. */
+.sealedart {
+	display: grid;
+	place-items: center;
+	color: rgb(255 255 255 / 0.82);
+	background-color: #101013;
+	background-image: radial-gradient(circle, rgb(255 255 255 / 0.1) 0 0.8px, transparent 1.2px);
+	background-size: 6px 6px;
+}
+.sealedart svg {
+	width: 100%;
+	height: 100%;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2.1;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-dasharray: 0 4.1;
+}
+.sealedart.big {
+	background-size: 12px 12px;
+	background-image: radial-gradient(circle, rgb(255 255 255 / 0.12) 0 1px, transparent 1.5px);
+}
+.sealedart.big svg {
+	stroke-width: 0.95;
+	stroke-dasharray: 0 2.05;
+}
+.sealedart .kind {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 9%;
+	text-align: center;
+	font-size: 12.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgb(255 255 255 / 0.6);
+}
+.chip.seal {
+	color: var(--lime);
+	box-shadow: inset 0 0 0 1px currentColor;
+}
+/* Product names are long ("151 Ultra-Premium Collection"): two lines instead of a cut-off one. */
+.row .name.wrap {
+	white-space: normal;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow-wrap: anywhere;
+	line-height: 1.22;
+}
+.rows > li.grouped {
+	background-image: none;
+}
+.grouphead {
+	margin: 0;
+	padding: 18px 2px 4px;
+	font-size: 12.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--faint);
+}
+.rows > li.grouped:first-child .grouphead {
+	padding-top: 2px;
+}
+
+/* ---------- language correction, inside the form of a copy ---------- */
+.langmult {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.langmult input {
+	max-width: 132px;
+}
+.grid2 a.btn.full {
+	justify-self: stretch;
+	text-align: center;
+	justify-content: center;
+	white-space: normal;
+}

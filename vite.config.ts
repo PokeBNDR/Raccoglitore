@@ -52,6 +52,9 @@ export default defineConfig(({ mode }) => {
 							},
 							workbox: {
 								globPatterns: ['**/*.{js,css,html,svg,png,woff2,json}'],
+							// The list of sealed products changes every day and the app keeps its own copy of it:
+							// it must not be part of what is stored at installation.
+							globIgnores: ['**/data/**'],
 								navigateFallback: 'index.html',
 								cleanupOutdatedCaches: true,
 							},

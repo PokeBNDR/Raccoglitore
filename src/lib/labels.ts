@@ -1,4 +1,4 @@
-import type { Catalog, Cond, LangCode, PriceBasis, Settings, VariantOpt } from './types'
+import type { Catalog, Cond, LangCode, PriceBasis, Settings, Source, VariantOpt } from './types'
 
 export const CONDS: Array<{ code: Cond; name: string; cm: number }> = [
 	{ code: 'MT', name: 'Mint', cm: 1 },
@@ -59,12 +59,20 @@ export const langName = (l: LangCode) => LANGS.find((x) => x.code === l)?.name ?
 export const basisName = (b: PriceBasis) => BASIS.find((x) => x.code === b)?.name ?? b
 export const catalogName = (c: Catalog) => CATALOGS.find((x) => x.code === c)?.name ?? c
 
+/** The Asian releases: different sets, their own card ids and their own Cardmarket products. */
+export const isAsian = (c: Source): c is Exclude<Catalog, 'int'> => c !== 'int' && c !== 'sealed'
+export const isSealed = (x: { catalog: Source }) => x.catalog === 'sealed'
+
+/** The Asian catalogue a language belongs to, for the languages that have one. */
+export const ASIAN_CATALOG: Partial<Record<LangCode, Exclude<Catalog, 'int'>>> = { JA: 'ja', KO: 'ko', ZH: 'zh-tw' }
+
 const TYPE: Record<string, string> = {
 	normal: 'Normale',
 	holo: 'Holo',
 	reverse: 'Reverse Holo',
 	metal: 'Metallo',
 	lenticular: 'Lenticolare',
+	sealed: 'Sigillato',
 }
 
 const SUBTYPE: Record<string, string> = {
@@ -143,8 +151,8 @@ export function cardNumber(localId: string, official?: number): string {
 }
 
 /** Name to show for a card: Asian cards lead with the Latin species name when it is known. */
-export function shownName(x: { catalog: string; name: string; nameAlt?: string }): string {
-	return x.catalog !== 'int' && x.nameAlt ? `${x.nameAlt} · ${x.name}` : x.name
+export function shownName(x: { catalog: Source; name: string; nameAlt?: string }): string {
+	return isAsian(x.catalog) && x.nameAlt ? `${x.nameAlt} · ${x.name}` : x.name
 }
 
 /** Font size for a page title: long card and set names step down so they stay on one or two lines. */
