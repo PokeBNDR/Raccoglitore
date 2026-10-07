@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayStr, eurTight, fmtWhen, ofWhen, parseNum, pct, round2 } from '../src/lib/format'
+import { dayStr, eur, eurShort, eurTight, fmtWhen, ofWhen, parseNum, pct, round2, signedEur, usd } from '../src/lib/format'
 import { DEFAULT_SETTINGS, cardNumber, variantLabel } from '../src/lib/labels'
 import { cardmarketUrl, ebaySoldUrl, marketQuery, namedOf } from '../src/lib/links'
 import { basePrice, figure, pickVariant, priceSource, totals, unitValue } from '../src/lib/pricing'
@@ -90,9 +90,25 @@ describe('prezzi digitati', () => {
 	it('formatta percentuali e importi stretti', () => {
 		expect(pct(12.34)).toBe('+12,3%')
 		expect(pct(-4)).toBe('−4%')
-		expect(eurTight(1168.49).replace(/\s/g, ' ')).toBe('1168 €')
+		expect(eurTight(1168.49).replace(/\s/g, ' ')).toBe('1.168 €')
 		expect(round2(0.048)).toBe(0.05)
 		expect(dayStr(new Date(2026, 9, 6))).toBe('2026-10-06')
+	})
+	it('gli importi hanno sempre il punto delle migliaia, anche sotto i diecimila', () => {
+		const t = (s: string) => s.replace(/\s/g, ' ')
+		expect(t(eur(0.4))).toBe('0,40 €')
+		expect(t(eur(999.9))).toBe('999,90 €')
+		expect(t(eur(2091.92))).toBe('2.091,92 €')
+		expect(t(eur(12345.678))).toBe('12.345,68 €')
+		expect(t(eur(1234567.891))).toBe('1.234.567,89 €')
+		expect(t(eurShort(9999.5))).toBe('9.999,50 €')
+		expect(t(eurShort(12345.678))).toBe('12.346 €')
+		expect(t(signedEur(-2091.92))).toBe('−2.091,92 €')
+		expect(t(signedEur(4469.26))).toBe('+4.469,26 €')
+		expect(t(usd(1234.5))).toMatch(/^1\.234,50 /)
+		expect(pct(4900)).toBe('+4.900%')
+		expect(eur(null)).toBe('—')
+		expect(eur(Number.NaN)).toBe('—')
 	})
 	it('date dopo un nome: «di ieri», «del 3 ott», «dell’8 ott»', () => {
 		const at = (d: Date) => ofWhen(d.getTime()).replace(/\s/g, ' ')

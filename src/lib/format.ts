@@ -1,25 +1,37 @@
-const EUR = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
-const EUR0 = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const USD = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'USD' })
+/**
+ * Thousands are always separated: "2.091,92 €". Left to itself, Italian number formatting starts
+ * doing so only at ten thousand ("2091,92 €" next to "12.345,68 €"), and not every browser lets that
+ * be changed, so the dots are put in here.
+ */
+const group = (s: string) => s.replace(/\d+/, (int) => int.replace(/\B(?=(\d{3})+(?!\d))/g, '.'))
 
-export const eur = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? '—' : EUR.format(n))
-export const eurShort = (n: number | null | undefined) =>
-	n == null || !Number.isFinite(n) ? '—' : Math.abs(n) >= 10000 ? EUR0.format(n) : EUR.format(n)
+function money(currency: string, noCents = false): (n: number) => string {
+	const f = new Intl.NumberFormat('it-IT', { style: 'currency', currency, useGrouping: false, ...(noCents ? { maximumFractionDigits: 0 } : {}) })
+	return (n) => group(f.format(n))
+}
+
+const EUR = money('EUR')
+const EUR0 = money('EUR', true)
+const USD = money('USD')
+
+const blank = (n: number | null | undefined): n is null | undefined => n == null || !Number.isFinite(n)
+
+export const eur = (n: number | null | undefined) => (blank(n) ? '—' : EUR(n))
+export const eurShort = (n: number | null | undefined) => (blank(n) ? '—' : Math.abs(n) >= 10000 ? EUR0(n) : EUR(n))
 /** For narrow cells: cents are dropped from a thousand up ("1.168 €"). */
-export const eurTight = (n: number | null | undefined) =>
-	n == null || !Number.isFinite(n) ? '—' : Math.abs(n) >= 1000 ? EUR0.format(n) : EUR.format(n)
-export const usd = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? '—' : USD.format(n))
+export const eurTight = (n: number | null | undefined) => (blank(n) ? '—' : Math.abs(n) >= 1000 ? EUR0(n) : EUR(n))
+export const usd = (n: number | null | undefined) => (blank(n) ? '—' : USD(n))
 
 /** "+12,3%" / "−4%" (true minus sign). */
 export function pct(x: number | null | undefined, digits = 1): string {
-	if (x == null || !Number.isFinite(x)) return '—'
-	const v = Math.abs(x).toLocaleString('it-IT', { maximumFractionDigits: digits })
+	if (blank(x)) return '—'
+	const v = group(Math.abs(x).toLocaleString('it-IT', { maximumFractionDigits: digits, useGrouping: false }))
 	return `${x >= 0 ? '+' : '−'}${v}%`
 }
 
 export function signedEur(n: number | null | undefined): string {
-	if (n == null || !Number.isFinite(n)) return '—'
-	return `${n >= 0 ? '+' : '−'}${EUR.format(Math.abs(n))}`
+	if (blank(n)) return '—'
+	return `${n >= 0 ? '+' : '−'}${EUR(Math.abs(n))}`
 }
 
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
