@@ -31,12 +31,15 @@ export function HoldingChips({ h, unit, compact }: { h: Holding; unit?: UnitResu
 }
 
 const COLS: PriceBasis[] = ['trend', 'avg1', 'avg7', 'avg30', 'low']
-const COL_NAME: Record<string, string> = { trend: 'Tend.', avg1: 'Ieri', avg7: '7 gg', avg30: '30 gg', low: 'Min.' }
+// For sealed products Cardmarket publishes no daily, weekly or monthly averages.
+const SEALED_COLS: PriceBasis[] = ['trend', 'avg', 'low']
+const COL_NAME: Record<string, string> = { trend: 'Tend.', avg: 'Media', avg1: 'Ieri', avg7: '7 gg', avg30: '30 gg', low: 'Min.' }
 
 /** Cardmarket's price guide for every version of a card. */
 export function PricePanel({ card, activeKey, basis }: { card: CardInfo; activeKey?: string; basis: PriceBasis }) {
 	const rows = card.variants.map((v) => ({ v, src: priceSource(card, v) }))
-	const any = rows.some((r) => COLS.some((b) => figure(r.src, b) != null))
+	const cols = card.catalog === 'sealed' ? SEALED_COLS : COLS
+	const any = rows.some((r) => cols.some((b) => figure(r.src, b) != null))
 	const updated = rows.find((r) => r.src.cm?.updated)?.src.cm?.updated ?? card.cm?.updated
 	const tcg = tcgLines(card)
 	const sealed = card.catalog === 'sealed'
@@ -55,8 +58,8 @@ export function PricePanel({ card, activeKey, basis }: { card: CardInfo; activeK
 								{v.key === activeKey ? ' · la tua' : ''}
 								{src.approx ? <span className="muted"> (prezzo della normale)</span> : null}
 							</span>
-							<div className="cells num">
-								{COLS.map((b) => (
+							<div className="cells num" style={cols.length !== 5 ? { gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` } : undefined}>
+								{cols.map((b) => (
 									<div key={b} className={b === basis ? 'main' : undefined} title={BASIS.find((x) => x.code === b)?.name}>
 										<span>{COL_NAME[b]}</span>
 										<b>{eurTight(figure(src, b))}</b>
@@ -121,9 +124,10 @@ export function ValueFormula({ h, unit, variant }: { h: Holding; unit: UnitResul
 	if (unit.kind === 'none') {
 		return (
 			<p className="small warn">
-				Cardmarket non ha un prezzo per{' '}
-				{h.catalog === 'sealed' ? 'questo prodotto' : variant ? `la versione «${variantLabel(variant)}»` : 'questa carta'}: apri
-				«Modifica» e inserisci il prezzo della tua copia.
+				{h.catalog === 'sealed'
+					? `Su Cardmarket non risultano vendite di questo prodotto${unit.base.cm?.low ? `, solo offerte da ${eur(unit.base.cm.low)}` : ''}`
+					: `Cardmarket non ha un prezzo per ${variant ? `la versione «${variantLabel(variant)}»` : 'questa carta'}`}
+				: apri «Modifica» e inserisci il prezzo della tua copia.
 			</p>
 		)
 	}

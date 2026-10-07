@@ -105,7 +105,10 @@ export function HoldingForm({ card, initial, copyFrom, onClose }: Props) {
 	if (badPrice) how = 'Controlla i prezzi: solo numeri, ad esempio 12,50.'
 	else if (unit.kind === 'manual') how = 'Prezzo inserito da te.'
 	else if (unit.kind === 'none') {
-		how = `Cardmarket non ha un prezzo per ${sealed ? 'questo prodotto' : 'questa versione'}: inserisci tu il prezzo qui sotto.`
+		const asking = sealed ? card.cm?.low : null
+		how = sealed
+			? `Su Cardmarket non risultano vendite di questo prodotto${asking ? `, solo offerte da ${eur(asking)}` : ''}: inserisci tu il prezzo qui sotto.`
+			: 'Cardmarket non ha un prezzo per questa versione: inserisci tu il prezzo qui sotto.'
 	} else {
 		const base = `${eur(unit.base.value)} (${unit.base.basis ? basisName(unit.base.basis) : ''})`
 		how = sealed ? `${base} × ${n(unit.langM)} (${lang})` : `${base} × ${n(unit.condM)} (${graded ? 'gradata' : cond}) × ${n(unit.langM)} (${lang})`

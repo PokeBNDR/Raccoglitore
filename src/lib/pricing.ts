@@ -65,10 +65,17 @@ export interface BaseResult {
 	cm: CmPrice | null
 }
 
-/** Starting price of one version of a card, before condition and language. */
+/**
+ * Starting price of one version of a card, before condition and language.
+ *
+ * When the chosen figure is missing another one takes its place. For sealed products the lowest
+ * offer is not among them: many have never sold on Cardmarket and their only figure is what one
+ * seller is asking, sometimes a hundred times the real price. Those are left to be priced by hand.
+ */
 export function basePrice(card: CardInfo | undefined, variant: VariantOpt | undefined, basis: PriceBasis): BaseResult {
 	const src = priceSource(card, variant)
-	for (const b of [basis, ...ALL.filter((x) => x !== basis)]) {
+	const spare = card?.catalog === 'sealed' ? ALL.filter((x) => x !== 'low') : ALL
+	for (const b of [basis, ...spare.filter((x) => x !== basis)]) {
 		const v = figure(src, b)
 		if (v != null) return { value: v, basis: b, substituted: b !== basis, approx: src.approx, cm: src.cm }
 	}

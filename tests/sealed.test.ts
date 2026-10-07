@@ -160,6 +160,13 @@ describe('prodotti sigillati nell’app', () => {
 		// No price at all on Cardmarket.
 		const tin = sealedCard(index.byId.get(733904)!, 0)
 		expect(unitValue(holding({ cardId: '733904' }), tin, s)).toMatchObject({ value: null, kind: 'none' })
+		// Never sold, one seller asking a price: that is not a value, unless the lowest offer is what was asked for.
+		const unsold = sealedCard({ ...product, cm: { idProduct: product.id, low: 10431 } }, 0)
+		expect(unitValue(holding(), unsold, s)).toMatchObject({ value: null, kind: 'none' })
+		expect(unitValue(holding(), unsold, { ...s, basis: 'low' }).value).toBe(10431)
+		// The average selling price does stand in for a missing trend.
+		const kit = sealedCard(index.byId.get(900002)!, 0)
+		expect(unitValue(holding({ cardId: '900002' }), kit, s)).toMatchObject({ value: 28, kind: 'auto' })
 	})
 	it('link: Cardmarket filtra per lingua ma non per condizione', () => {
 		expect(cardmarketUrl(card)).toBe('https://www.cardmarket.com/it/Pokemon/Products?idProduct=733901')

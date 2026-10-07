@@ -65,6 +65,8 @@ export function SealedRow({ product, showExpansion, setName }: { product: Sealed
 	const owned = useStore((s) => s.holdings.reduce((n, h) => (h.catalog === 'sealed' && h.cardId === String(product.id) ? n + h.qty : n), 0))
 	const card = sealedCard(product, 0)
 	const price = basePrice(card, card.variants[0], basis).value
+	// Never sold on Cardmarket: all there is, is what a seller is asking.
+	const asking = price == null ? (product.cm.low ?? null) : null
 	return (
 		<a className="row" href={href('prodotto', String(product.id))} data-testid="sealed-row">
 			<SealedArt cat={product.cat} kind={product.kind.one} />
@@ -76,6 +78,7 @@ export function SealedRow({ product, showExpansion, setName }: { product: Sealed
 			</span>
 			<span className="end num">
 				<span className="val">{price != null ? eur(price) : <span className="muted">—</span>}</span>
+				{asking != null ? <span className="pl muted">offerte da {eur(asking)}</span> : null}
 				{owned > 0 ? <span className="pl">ne hai {owned}</span> : null}
 			</span>
 		</a>

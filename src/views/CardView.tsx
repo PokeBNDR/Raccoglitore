@@ -38,6 +38,10 @@ export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 	const a7 = src ? figure(src, 'avg7') : null
 	const a30 = src ? figure(src, 'avg30') : null
 	const move = a7 != null && a30 != null && a30 > 0 ? ((a7 - a30) / a30) * 100 : null
+	// Sealed products have no daily, weekly or monthly averages on Cardmarket: only the average
+	// selling price and the lowest offer.
+	const avg = src ? figure(src, 'avg') : null
+	const low = src ? figure(src, 'low') : null
 
 	// Asks the catalogue again instead of using the copy saved a few hours ago.
 	const reprice = async () => {
@@ -144,7 +148,9 @@ export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 								<span className="unit">
 									{base?.value != null
 										? `Euro · ${base.basis ? basisName(base.basis) : ''} Cardmarket`
-										: 'Nessun prezzo su Cardmarket'}
+										: sealed && low != null
+											? `Nessuna vendita su Cardmarket · offerte da ${eur(low)}`
+											: 'Nessun prezzo su Cardmarket'}
 								</span>
 							</div>
 							{move != null && Math.abs(move) >= 0.1 ? (
@@ -157,8 +163,8 @@ export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 						<section className="glass t-indigo board">
 							<div className="trio num">
 								<div>
-									<b>{eurTight(a7)}</b>
-									<span>7 giorni</span>
+									<b>{eurTight(sealed ? avg : a7)}</b>
+									<span>{sealed ? 'media' : '7 giorni'}</span>
 								</div>
 								<div>
 									<TriGlyph />
@@ -167,11 +173,11 @@ export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 									</span>
 								</div>
 								<div>
-									<b>{eurTight(a30)}</b>
-									<span>30 giorni</span>
+									<b>{eurTight(sealed ? low : a30)}</b>
+									<span>{sealed ? 'minimo' : '30 giorni'}</span>
 								</div>
 							</div>
-							{a30 != null || a7 != null || a1 != null ? (
+							{!sealed && (a30 != null || a7 != null || a1 != null) ? (
 								<>
 									<Scale ring={a30} knob={a7} end={a1} />
 									<div className="legend num">
