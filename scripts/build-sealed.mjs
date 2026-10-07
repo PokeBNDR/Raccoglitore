@@ -143,6 +143,50 @@ export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookup
 	}
 }
 
+/**
+ * Which Cardmarket expansion each set belongs to. There are two sources: the seed file, taken from
+ * the open card database (where a few entries turned out to be wrong: two different sets pointing
+ * to the same expansion), and what the cards of the set say, through Cardmarket's own list of
+ * single cards. When the cards speak clearly, they win.
+ * `known` is the seed ("catalogue:setId" → expansion); `lookups` what the cards said:
+ * { e: expansion (0 when unknown), n: cards in favour, t: cards asked }.
+ */
+export function resolveLinks({ known = {}, lookups = {} }) {
+	const sets = {}
+	const conflicts = []
+	const stats = { seed: Object.keys(known).length, confirmed: 0, corrected: 0, unverified: 0, weak: 0, fromCards: 0 }
+	for (const [key, seedExp] of Object.entries(known)) {
+		const l = lookups[key]
+		const viaCards = l?.e || 0
+		// One card alone, or a narrow majority, is not enough to overrule the seed.
+		const clear = viaCards && (l.n ?? 0) >= 2 && (l.n ?? 0) * 2 > (l.t ?? 0)
+		if (!viaCards) stats.unverified++
+		else if (viaCards === seedExp) stats.confirmed++
+		else if (clear) {
+			stats.corrected++
+			conflicts.push([key, seedExp, viaCards])
+		} else stats.weak++
+		sets[key] = viaCards && viaCards !== seedExp && clear ? viaCards : seedExp
+	}
+	for (const [key, l] of Object.entries(lookups)) {
+		if (!l?.e || key in known) continue
+		sets[key] = l.e
+		stats.fromCards++
+	}
+	// Sets of one catalogue sharing an expansion: right for a subset of a set, wrong otherwise.
+	const byExp = new Map()
+	for (const [key, exp] of Object.entries(sets)) {
+		const id = `${key.slice(0, key.indexOf(':'))}:${exp}`
+		if (!byExp.has(id)) byExp.set(id, [])
+		byExp.get(id).push(key)
+	}
+	const shared = [...byExp.entries()]
+		.filter(([, keys]) => keys.length > 1)
+		.map(([id, keys]) => [Number(id.slice(id.indexOf(':') + 1)), keys.sort()])
+		.sort((a, b) => a[0] - b[0])
+	return { sets, conflicts, shared, stats }
+}
+
 /** At most `max` items of a list, with the number left out when it is longer. */
 const capped = (list, max) => (list.length > max ? [...list.slice(0, max), `…e altri ${list.length - max}`] : list)
 
@@ -151,7 +195,7 @@ const capped = (list, max) => (list.length > max ? [...list.slice(0, max), `…e
  * `sets` is every known link "catalogue:setId" → Cardmarket expansion (also the ones whose
  * expansion has no sealed product); `catalog` lists the sets of the card catalogue, per catalogue.
  */
-export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys = {} }) {
+export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys = {}, links = null }) {
 	const perExp = new Map()
 	for (const row of data?.p ?? []) perExp.set(row[3], (perExp.get(row[3]) ?? 0) + 1)
 	const m = data?.meta ?? {}
@@ -167,9 +211,25 @@ export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys 
 		catCounts: m.catCounts ?? {},
 		sets: {},
 		orphans: { expansions: 0, products: 0, top: [] },
-		lookups: { tried: m.lookupsTried ?? 0, resolved: m.lookupsResolved ?? 0 },
+		lookups: { tried: m.lookupsTried ?? 0, resolved: m.lookupsResolved ?? 0, left: m.lookupsLeft ?? 0 },
 		keys,
 		errors: m.errors ?? [],
+	}
+	if (links) {
+		const label = (id) => data?.exp?.[id]?.n ?? (perExp.has(id) ? '' : '(nessun sigillato)')
+		out.links = {
+			...links.stats,
+			// Where the cards of a set pointed to another expansion than the seed file: [set, seed, its name, cards, its name].
+			conflicts: capped(
+				links.conflicts.map(([key, a, b]) => [key, a, label(a), b, label(b)]),
+				60,
+			),
+			// Sets of the same catalogue on one expansion: [expansion, its name, sets].
+			shared: capped(
+				links.shared.map(([id, list]) => [id, label(id), list]),
+				60,
+			),
+		}
 	}
 	for (const [cat, list] of Object.entries(catalog)) {
 		const pending = []
@@ -221,6 +281,26 @@ export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys 
 		top: orphans.slice(0, 80),
 	}
 	return out
+}
+
+/**
+ * Every expansion with sealed products that no set points to, with one of its products as an
+ * example: [expansion, name, how many products, example]. A separate file, to be read when
+ * deciding which of them can be linked to a set by hand.
+ */
+export function listOrphans(data) {
+	const count = new Map()
+	const example = new Map()
+	// Rows are sorted newest first: the last one met for an expansion is its oldest product,
+	// usually the plainest one (the booster, the box).
+	for (const row of data?.p ?? []) {
+		count.set(row[3], (count.get(row[3]) ?? 0) + 1)
+		example.set(row[3], row[1])
+	}
+	return Object.entries(data?.exp ?? {})
+		.filter(([, e]) => !e?.s?.length)
+		.map(([id, e]) => [Number(id), e?.n ?? '', count.get(Number(id)) ?? 0, String(example.get(Number(id)) ?? '').slice(0, 60)])
+		.sort((a, b) => a[0] - b[0])
 }
 
 // ------------------------------------------------------------------ reading
@@ -302,65 +382,65 @@ async function loadCatalog(log) {
 }
 
 /**
- * Finds the Cardmarket expansion of the sets the seed file does not cover, by looking at a few
- * cards of each set: the catalogue knows their Cardmarket product, and Cardmarket's list of single
- * cards says which expansion a product belongs to.
+ * Asks the cards of each set which Cardmarket expansion they belong to: the catalogue knows their
+ * Cardmarket product, and Cardmarket's list of single cards says which expansion a product is in.
+ * The sets the seed file does not cover come first; then the ones it covers, to check it.
+ * Every answer is kept, so a set is asked once (again after a week if nothing was found).
  */
 async function lookupSets({ known, lookups, catalog, log }) {
 	const started = Date.now()
 	const today = new Date().toISOString().slice(0, 10)
 	const due = (key) => {
-		if (known[key]) return false
 		const old = lookups[key]
 		if (!old) return true
 		if (old.e) return false
 		return (Date.now() - new Date(old.d).getTime()) / 86_400_000 >= RETRY_DAYS
 	}
 	const out = { ...lookups }
-	let singlesExp = null
+	const todo = []
+	for (const [cat, lang] of CATALOGS) for (const s of catalog[cat] ?? []) if (due(`${cat}:${s.id}`)) todo.push({ key: `${cat}:${s.id}`, id: s.id, lang })
+	todo.sort((a, b) => Number(!!known[a.key]) - Number(!!known[b.key]))
 	let resolved = 0
 	let tried = 0
-	for (const [cat, lang] of CATALOGS) {
-		const todo = (catalog[cat] ?? []).filter((s) => due(`${cat}:${s.id}`))
-		if (!todo.length) continue
-		if (!singlesExp) {
-			const singles = await load(SRC.singles)
-			singlesExp = new Map()
-			for (const p of singles?.products ?? []) if (p?.idProduct && p.idExpansion) singlesExp.set(p.idProduct, p.idExpansion)
-			console.log(`Carte singole Cardmarket lette: ${singlesExp.size}; set da collegare: ${todo.length} (${cat})`)
-		}
-		const run = pool(5)
-		await Promise.all(
-			todo.map((s) =>
-				run(async () => {
-					if (Date.now() - started > LOOKUP_BUDGET_MS) return
-					const key = `${cat}:${s.id}`
-					tried++
-					try {
-						const set = await load(`${TCGDEX}/${lang}/sets/${encodeURIComponent(s.id)}`, { tries: 2, timeoutMs: 30_000 })
-						const cards = set?.cards ?? []
-						const picks = [...new Set([0, Math.floor(cards.length / 3), Math.floor((cards.length * 2) / 3), cards.length - 1])]
-							.map((i) => cards[i])
-							.filter(Boolean)
-						const exps = []
-						for (const c of picks) {
-							const card = await load(`${TCGDEX}/${lang}/cards/${encodeURIComponent(c.id)}`, { tries: 2, timeoutMs: 30_000 })
-							for (const id of cardProductIds(card)) {
-								const e = singlesExp.get(id)
-								if (e) exps.push(e)
-							}
-						}
-						const e = majority(exps)
-						out[key] = e ? { e, d: today } : { e: 0, d: today }
-						if (e) resolved++
-					} catch (err) {
-						log(`${key}: ${err.message}`)
+	if (!todo.length) return { lookups: out, tried, resolved, left: 0 }
+
+	const singles = await load(SRC.singles)
+	const singlesExp = new Map()
+	for (const p of singles?.products ?? []) if (p?.idProduct && p.idExpansion) singlesExp.set(p.idProduct, p.idExpansion)
+	console.log(`Carte singole Cardmarket lette: ${singlesExp.size}; set da chiedere: ${todo.length}`)
+	const run = pool(5)
+	await Promise.all(
+		todo.map((s) =>
+			run(async () => {
+				if (Date.now() - started > LOOKUP_BUDGET_MS) return
+				tried++
+				try {
+					const set = await load(`${TCGDEX}/${s.lang}/sets/${encodeURIComponent(s.id)}`, { tries: 2, timeoutMs: 30_000 })
+					const cards = set?.cards ?? []
+					const picks = [...new Set([0, Math.floor(cards.length / 3), Math.floor((cards.length * 2) / 3), cards.length - 1])]
+						.map((i) => cards[i])
+						.filter(Boolean)
+					// One vote per card: the expansion most of its Cardmarket products are in.
+					const votes = []
+					for (const c of picks) {
+						const card = await load(`${TCGDEX}/${s.lang}/cards/${encodeURIComponent(c.id)}`, { tries: 2, timeoutMs: 30_000 })
+						const e = majority(
+							cardProductIds(card)
+								.map((id) => singlesExp.get(id))
+								.filter(Boolean),
+						)
+						if (e) votes.push(e)
 					}
-				}),
-			),
-		)
-	}
-	return { lookups: out, tried, resolved }
+					const e = majority(votes)
+					out[s.key] = e ? { e, d: today, n: votes.filter((v) => v === e).length, t: votes.length } : { e: 0, d: today }
+					if (e) resolved++
+				} catch (err) {
+					log(`${s.key}: ${err.message}`)
+				}
+			}),
+		),
+	)
+	return { lookups: out, tried, resolved, left: todo.length - tried }
 }
 
 // ------------------------------------------------------------------ main
@@ -402,6 +482,7 @@ export async function main() {
 		let lookups = previous?.lookups && typeof previous.lookups === 'object' ? previous.lookups : {}
 		let tried = 0
 		let resolved = 0
+		let left = 0
 		const catalog = await loadCatalog(log)
 		if (process.env.SKIP_LOOKUPS !== '1') {
 			try {
@@ -409,12 +490,13 @@ export async function main() {
 				lookups = res.lookups
 				tried = res.tried
 				resolved = res.resolved
+				left = res.left
 			} catch (err) {
 				log(`ricerca delle espansioni: ${err.message}`)
 			}
 		}
-		const sets = { ...known }
-		for (const [key, v] of Object.entries(lookups)) if (v?.e && !sets[key]) sets[key] = v.e
+		const links = resolveLinks({ known, lookups })
+		const sets = links.sets
 
 		// English names of the international sets, for the expansions' labels.
 		const names = {}
@@ -423,12 +505,14 @@ export async function main() {
 		data = buildDataset({ nonsingles, prices, sets, names, lookups })
 		data.meta.lookupsTried = tried
 		data.meta.lookupsResolved = resolved
+		data.meta.lookupsLeft = left
 		data.meta.errors = errors
 		report = buildReport({
 			data,
 			sets,
 			catalog,
 			lookups,
+			links,
 			// The columns Cardmarket's files have today, to notice when they change.
 			keys: { product: Object.keys(nonsingles.products[0] ?? {}), price: Object.keys(prices.priceGuides[0] ?? {}) },
 		})
@@ -457,6 +541,7 @@ export async function main() {
 	// When Cardmarket could not be read the list is the one of last time, and the report only says so.
 	await mkdir(dirname(REPORT), { recursive: true })
 	await writeFile(REPORT, JSON.stringify(report ?? buildReport({ data })))
+	await writeFile(resolve(dirname(REPORT), 'sealed-orphans.json'), JSON.stringify({ v: 1, built: data.built ?? null, rows: listOrphans(data) }))
 	const m = data.meta ?? {}
 	console.log(
 		`Sigillati: ${m.products ?? 0} prodotti (${m.priced ?? 0} con prezzo), ${m.expansions ?? 0} espansioni di cui ${m.mapped ?? 0} collegate a un set; listino del ${data.updated ?? '—'}; ${(text.length / 1024).toFixed(0)} kB → ${OUT}`,

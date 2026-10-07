@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildDataset, buildReport, expansionLabel, majority } from '../scripts/build-sealed.mjs'
+import { buildDataset, buildReport, expansionLabel, listOrphans, majority, resolveLinks } from '../scripts/build-sealed.mjs'
 import { DEFAULT_SETTINGS, isAsian, variantLabel } from '../src/lib/labels'
 import { cardmarketUrl, ebaySoldUrl, namedOf } from '../src/lib/links'
 import { unitValue } from '../src/lib/pricing'
@@ -54,6 +54,57 @@ describe('file dei prodotti sigillati', () => {
 		// A mapping to an expansion with no sealed products is dropped.
 		expect(Object.keys(file.exp)).not.toContain('99999')
 	})
+	it('collegamenti: quando le carte parlano chiaro, vincono sul file di partenza', () => {
+		const links = resolveLinks({
+			known: { 'ja:S11': 5257, 'ja:SV1a': 5257, 'ja:SV3a': 5432, 'ja:SV4a': 5432, 'int:ex10': 1548, 'int:exu': 1548, 'int:sm1': 1700, 'int:sm2': 1701 },
+			lookups: {
+				// The cards of S11 are somewhere else: the seed was wrong.
+				'ja:S11': { e: 5090, d: '2026-10-08', n: 4, t: 4 },
+				'ja:SV1a': { e: 5257, d: '2026-10-08', n: 4, t: 4 },
+				'ja:SV3a': { e: 5432, d: '2026-10-08', n: 3, t: 4 },
+				// Nothing known about the cards of SV4a: the seed stays, but the sharing is reported.
+				'ja:SV4a': { e: 0, d: '2026-10-08' },
+				'int:ex10': { e: 1548, d: '2026-10-08', n: 4, t: 4 },
+				// One card out of four, or two against two, do not overrule the seed.
+				'int:sm1': { e: 9999, d: '2026-10-08', n: 1, t: 1 },
+				'int:sm2': { e: 9998, d: '2026-10-08', n: 2, t: 4 },
+				// A set the seed does not have: the cards are the only source (also answers of older builds, without counts).
+				'int:new1': { e: 6700, d: '2026-10-07' },
+				'int:none': { e: 0, d: '2026-10-07' },
+			},
+		})
+		expect(links.sets).toEqual({
+			'ja:S11': 5090,
+			'ja:SV1a': 5257,
+			'ja:SV3a': 5432,
+			'ja:SV4a': 5432,
+			'int:ex10': 1548,
+			'int:exu': 1548,
+			'int:sm1': 1700,
+			'int:sm2': 1701,
+			'int:new1': 6700,
+		})
+		expect(links.conflicts).toEqual([['ja:S11', 5257, 5090]])
+		expect(links.stats).toEqual({ seed: 8, confirmed: 3, corrected: 1, unverified: 2, weak: 2, fromCards: 1 })
+		// What still shares an expansion within one catalogue, to be looked at by hand.
+		expect(links.shared).toEqual([
+			[1548, ['int:ex10', 'int:exu']],
+			[5432, ['ja:SV3a', 'ja:SV4a']],
+		])
+		// The same expansion in two catalogues is not a sharing: it is how a common release looks.
+		expect(resolveLinks({ known: { 'int:a': 1, 'ja:a': 1 } }).shared).toEqual([])
+		expect(resolveLinks({})).toMatchObject({ sets: {}, conflicts: [], shared: [] })
+	})
+	it('elenca le espansioni che nessun set indica, con un prodotto d’esempio', () => {
+		const rows = listOrphans(file)
+		expect(rows.map((r) => r[0])).toEqual([...rows.map((r) => r[0])].sort((a, b) => a - b))
+		expect(rows.map((r) => r[0])).toEqual(expect.arrayContaining([6030, 7778]))
+		expect(rows.map((r) => r[0])).not.toContain(1523)
+		const destined = rows.find((r) => r[0] === 6030)!
+		expect(destined[1]).toBe('Destined Rivals')
+		expect(destined[2]).toBe(file.p.filter((r) => r[3] === 6030).length)
+		expect(file.p.filter((r) => r[3] === 6030).map((r) => r[1])).toContain(destined[3])
+	})
 	it('dice quanto è completo: set collegati, senza prodotti, non trovati, ancora da cercare', () => {
 		const report = buildReport({
 			data: file,
@@ -89,6 +140,15 @@ describe('file dei prodotti sigillati', () => {
 		expect(report.orphans.top[0][2]).toBeGreaterThanOrEqual(report.orphans.top[1][2])
 		expect(report.orphans.top.map((o) => o[0])).toContain(6030)
 		expect(report.keys).toEqual({ price: ['idProduct', 'trend'] })
+		expect(report.links).toBeUndefined()
+		const withLinks = buildReport({
+			data: file,
+			links: resolveLinks({ known: { 'int:base1': 1521, 'int:xy4': 1521 }, lookups: { 'int:base1': { e: 1523, d: '2026-10-08', n: 4, t: 4 }, 'int:sv03.5': { e: 5402, d: '2026-10-08' }, 'int:b': { e: 5402, d: '2026-10-08' } } }),
+		})
+		// The expansions are named, so that a wrong link can be recognised at a glance.
+		expect(withLinks.links).toMatchObject({ seed: 2, corrected: 1, unverified: 1, fromCards: 2 })
+		expect(withLinks.links?.conflicts).toEqual([['int:base1', 1521, 'Phantom Forces', 1523, 'Base Set']])
+		expect(withLinks.links?.shared).toEqual([[5402, '151', ['int:b', 'int:sv03.5']]])
 		// A long list is cut, saying how much is left out.
 		const many = buildReport({ data: file, catalog: { int: Array.from({ length: 130 }, (_, i) => ({ id: `s${i}`, name: '' })) } })
 		expect(many.sets.int.pending).toHaveLength(121)
