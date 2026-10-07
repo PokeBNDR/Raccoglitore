@@ -38,7 +38,17 @@ Le carte giapponesi, coreane e cinesi sono invece prodotti a sé, con un loro li
 Una pagina web non può leggere i file di Cardmarket direttamente. Li legge `scripts/build-sealed.mjs` quando il sito viene
 costruito (a ogni modifica e ogni mattina) e ne ricava `data/sealed.json`, che l'app carica dal proprio indirizzo.
 Le espansioni di Cardmarket sono collegate ai set del catalogo con `scripts/expansions-seed.json` e, per i set che lì
-mancano, guardando a quale espansione appartengono le loro carte.
+mancano, guardando a quale espansione appartengono le loro carte. Quanto è completo il risultato (quanti set hanno i loro
+sigillati, quali no e perché) è scritto in `data/sealed-report.json`, pubblicato accanto all'elenco.
+
+### Prezzi per lingua: prova con CardTrader
+
+Per far pesare la lingua da sola servono prezzi distinti per lingua, e Cardmarket non li pubblica. Li ha
+[CardTrader](https://www.cardtrader.com), che li dà a chi ha un account tramite un token personale.
+`scripts/cardtrader-probe.mjs` è una prova: fa qualche decina di domande a CardTrader e scrive le risposte in
+`data/cardtrader-*.json` (solo numeri e nomi dei campi: niente venditori, niente dati dell'account), per decidere su
+dati veri come usarli. Non fa nulla finché nel repository non c'è il segreto `CARDTRADER_TOKEN`
+(**Settings → Secrets and variables → Actions → New repository secret**). Il token non va mai scritto nei file.
 La collezione è salvata nel browser del dispositivo (IndexedDB); non c'è ancora un account né la sincronizzazione.
 
 ## Comandi
@@ -50,7 +60,7 @@ npm run build          # app da pubblicare → dist/
 npm run build:single   # un solo file HTML da aprire sul computer → dist-single/index.html
 npm run data           # prodotti sigillati e prezzi da Cardmarket → public/data/sealed.json
 npm run data:test      # lo stesso, ma dai dati di prova in tests/fixtures
-npm test               # controlli su prezzi, link, ricerca e prodotti sigillati
+npm test               # controlli su prezzi, link, ricerca, prodotti sigillati e prova di CardTrader
 npm run test:live      # interroga le fonti vere e verifica che rispondano come l'app si aspetta
 ```
 

@@ -36,6 +36,16 @@ jobs:
       # public/data/sealed.json. If Cardmarket cannot be reached the file already online is kept.
       - name: Prodotti sigillati
         run: PREVIOUS_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/data/sealed.json" node scripts/build-sealed.mjs
+      # A trial of CardTrader as the source of prices by language and condition: it asks a few dozen
+      # questions and writes what comes back (numbers and field names only: no sellers, no account
+      # data) to public/data/cardtrader-*.json. It does nothing until the repository has the secret
+      # CARDTRADER_TOKEN (Settings → Secrets and variables → Actions), and it never stops a publication.
+      - name: Prova di CardTrader
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
+        run: node scripts/cardtrader-probe.mjs
       - run: npm run build
       - uses: actions/upload-pages-artifact@v5
         with:
