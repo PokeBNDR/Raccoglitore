@@ -26,7 +26,7 @@ export interface SealedFile {
 	/** Cardmarket expansion id → its name and the catalogue sets ("int:base1") it corresponds to. */
 	exp: Record<string, { n?: string; s?: string[] }>
 	p: SealedRow[]
-	meta?: { products?: number; priced?: number; stale?: boolean; errors?: string[] }
+	meta?: { products?: number; priced?: number; stale?: boolean; errors?: string[]; catCounts?: Record<string, number> }
 }
 
 export interface SealedProduct {
@@ -56,7 +56,7 @@ export interface SealedIndex {
 
 // ---------------------------------------------------------------- kinds of product
 
-export type Glyph = 'box' | 'pack' | 'etb' | 'gift' | 'tin' | 'deck' | 'other'
+export type Glyph = 'box' | 'pack' | 'etb' | 'gift' | 'tin' | 'deck' | 'coin' | 'other'
 
 export interface CatInfo {
 	/** One product: "Busta". */
@@ -68,28 +68,44 @@ export interface CatInfo {
 	glyph: Glyph
 	/** What people type when they look for this kind of product, Italian and English. */
 	words: string
+	/**
+	 * Listed by Cardmarket next to the sealed products without being one: coins, lots of loose
+	 * cards, complete sets of cards. Shown after the sealed products.
+	 */
+	extra?: boolean
 }
 
 const CATS: Record<number, CatInfo> = {
 	53: { one: 'Display', many: 'Display (box di buste)', order: 1, glyph: 'box', words: 'display booster box boosterbox scatola' },
 	52: { one: 'Busta', many: 'Buste', order: 2, glyph: 'pack', words: 'booster pack busta bustina buste bustine pacchetto' },
+	1083: { one: 'Blister', many: 'Blister', order: 3, glyph: 'pack', words: 'blister' },
 	1016: {
 		one: 'ETB',
 		many: 'Set Allenatore Fuoriclasse (ETB)',
-		order: 3,
+		order: 4,
 		glyph: 'etb',
 		words: 'etb elite trainer box set allenatore fuoriclasse',
 	},
 	1015: {
 		one: 'Collezione',
 		many: 'Collezioni e cofanetti',
-		order: 4,
+		order: 5,
 		glyph: 'gift',
 		words: 'box set collection collezione cofanetto premium bundle',
 	},
-	1014: { one: 'Tin', many: 'Tin', order: 5, glyph: 'tin', words: 'tin latta scatola di latta' },
-	54: { one: 'Mazzo', many: 'Mazzi', order: 6, glyph: 'deck', words: 'theme deck mazzo mazzi deck' },
-	1013: { one: 'Kit Allenatore', many: 'Kit Allenatore', order: 7, glyph: 'deck', words: 'trainer kit kit allenatore' },
+	1014: { one: 'Tin', many: 'Tin', order: 6, glyph: 'tin', words: 'tin latta scatola di latta' },
+	54: { one: 'Mazzo', many: 'Mazzi', order: 7, glyph: 'deck', words: 'theme deck mazzo mazzi deck' },
+	1013: { one: 'Kit Allenatore', many: 'Kit Allenatore', order: 8, glyph: 'deck', words: 'trainer kit kit allenatore' },
+	1654: {
+		one: 'Set completo',
+		many: 'Set completi di carte',
+		order: 20,
+		glyph: 'deck',
+		words: 'full set main set master set completo completi',
+		extra: true,
+	},
+	1064: { one: 'Lotto', many: 'Lotti e carte promo', order: 21, glyph: 'other', words: 'lot lotto lotti promo', extra: true },
+	1017: { one: 'Moneta', many: 'Monete', order: 22, glyph: 'coin', words: 'coin moneta monete', extra: true },
 }
 
 /** How a Cardmarket category is shown. Categories this app does not know keep Cardmarket's name. */
@@ -170,7 +186,7 @@ export function sealedOfSet(index: SealedIndex | null | undefined, catalog: Cata
 }
 
 export function sortSealed(list: SealedProduct[]): SealedProduct[] {
-	return list.slice().sort((a, b) => a.kind.order - b.kind.order || a.cat - b.cat || a.name.localeCompare(b.name, 'en'))
+	return list.slice().sort((a, b) => a.kind.order - b.kind.order || a.cat - b.cat || a.name.localeCompare(b.name, 'en', { numeric: true }))
 }
 
 /** Lower-case words of a text, each preceded by a space: " 151 elite trainer box". */
@@ -195,15 +211,24 @@ function hay(p: SealedProduct, cats: Record<string, string>): string {
 /**
  * Products whose name, expansion or kind have a word starting with each word typed. Newest first.
  * Whole words, not pieces of them: "tin" must not find "Destined Rivals".
+ * `altName` gives another name the expansion goes by (its Italian name), to search by that too.
  */
-export function searchSealed(index: SealedIndex | null | undefined, query: string): SealedProduct[] {
+export function searchSealed(
+	index: SealedIndex | null | undefined,
+	query: string,
+	altName?: (p: SealedProduct) => string | undefined,
+): SealedProduct[] {
 	if (!index) return []
 	const words = wordsOf(query).split(' ').filter(Boolean)
 	if (!words.length) return []
-	return index.products.filter((p) => {
-		const h = hay(p, index.cats)
+	const found = index.products.filter((p) => {
+		let h = hay(p, index.cats)
+		const alt = altName?.(p)
+		if (alt) h += wordsOf(alt)
 		return words.every((w) => h.includes(' ' + w))
 	})
+	// Coins, lots and complete sets answer too, after the sealed products.
+	return found.sort((a, b) => Number(!!a.kind.extra) - Number(!!b.kind.extra))
 }
 
 // ---------------------------------------------------------------- loading
@@ -241,7 +266,7 @@ export function sealedCard(p: SealedProduct, fetchedAt: number, setName?: string
 		set: { id: p.set?.id ?? '', name: setName || p.expName },
 		// Shown where a card shows its rarity: the kind of product.
 		rarity: p.kind.one,
-		variants: [{ key: 'sealed', type: 'sealed', stamps: [], cmId: p.id, cm: p.cm }],
+		variants: [{ key: 'sealed', type: p.kind.extra ? 'item' : 'sealed', stamps: [], cmId: p.id, cm: p.cm }],
 		cm: p.cm,
 		tcg: null,
 		fetchedAt,

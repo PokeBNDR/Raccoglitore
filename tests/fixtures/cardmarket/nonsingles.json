@@ -127,6 +127,24 @@
    "idExpansion": 7778,
    "idMetacard": 0,
    "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 733905,
+   "name": "151: Mew Coin (Ultra-Premium Collection)",
+   "idCategory": 1017,
+   "categoryName": "Pokémon Coins",
+   "idExpansion": 5402,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
+  },
+  {
+   "idProduct": 271830,
+   "name": "Base Set: Charizard 1-Pack Blister",
+   "idCategory": 1083,
+   "categoryName": "Pokémon Blisters",
+   "idExpansion": 1523,
+   "idMetacard": 0,
+   "dateAdded": "2007-01-01 00:00:00"
   }
  ]
 }

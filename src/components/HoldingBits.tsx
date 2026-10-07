@@ -1,5 +1,6 @@
 import { eur, eurTight, fmtWhen, ofWhen, usd } from '../lib/format'
 import { BASIS, basisName, condName, variantLabel } from '../lib/labels'
+import { catInfo } from '../lib/sealed'
 import { figure, priceSource, type UnitResult } from '../lib/pricing'
 import type { CardInfo, Holding, PriceBasis, VariantOpt } from '../lib/types'
 
@@ -10,7 +11,7 @@ export function HoldingChips({ h, unit, compact }: { h: Holding; unit?: UnitResu
 		<span className="chips">
 			<span className="chip">{h.lang}</span>
 			{sealed ? (
-				<span className="chip seal">Sigillato</span>
+				<span className="chip seal">{catInfo(h.sealed?.cat).extra ? h.rarity || 'Prodotto' : 'Sigillato'}</span>
 			) : h.grade ? (
 				<span className="chip accent">
 					{h.grade.company} {h.grade.value}

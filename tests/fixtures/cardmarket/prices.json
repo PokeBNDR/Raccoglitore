@@ -225,6 +225,38 @@
    "avg1-holo": null,
    "avg7-holo": null,
    "avg30-holo": null
+  },
+  {
+   "idProduct": 733905,
+   "idCategory": 1017,
+   "avg": 2.1,
+   "low": 0.9,
+   "trend": 2.21,
+   "avg1": 2.3,
+   "avg7": 2.2,
+   "avg30": 2.15,
+   "avg-holo": null,
+   "low-holo": null,
+   "trend-holo": null,
+   "avg1-holo": null,
+   "avg7-holo": null,
+   "avg30-holo": null
+  },
+  {
+   "idProduct": 271830,
+   "idCategory": 1083,
+   "avg": 1650,
+   "low": 1500,
+   "trend": 1709.83,
+   "avg1": null,
+   "avg7": null,
+   "avg30": null,
+   "avg-holo": null,
+   "low-holo": null,
+   "trend-holo": null,
+   "avg1-holo": null,
+   "avg7-holo": null,
+   "avg30-holo": null
   }
  ]
 }

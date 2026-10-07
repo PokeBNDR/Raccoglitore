@@ -73,6 +73,8 @@ const TYPE: Record<string, string> = {
 	metal: 'Metallo',
 	lenticular: 'Lenticolare',
 	sealed: 'Sigillato',
+	// Coins, lots and complete sets that Cardmarket lists with the sealed products.
+	item: 'Prodotto',
 }
 
 const SUBTYPE: Record<string, string> = {

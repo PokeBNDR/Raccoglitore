@@ -160,6 +160,8 @@ export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 	const sealed = useAsync(() => loadSealed().catch(() => null), [])
 	const index = sealed.data?.index ?? null
 	const products = useMemo(() => sealedOfSet(index, catalog, id), [index, catalog, id])
+	// Coins, lots and complete sets are listed too, at the end, but are not what the button counts.
+	const sealedCount = products.filter((p) => !p.kind.extra).length
 
 	const cards = useMemo(() => {
 		const all = data?.cards ?? []
@@ -232,7 +234,7 @@ export function SetView({ catalog, id }: { catalog: Catalog; id: string }) {
 									['all', 'Tutte'],
 									['owned', 'Che ho'],
 									['missing', 'Mancanti'],
-									['sealed', products.length ? `Sigillati ${products.length}` : 'Sigillati'],
+									['sealed', sealedCount ? `Sigillati ${sealedCount}` : 'Sigillati'],
 								] as Array<[Show, string]>
 							).map(([k, label]) => (
 								<button

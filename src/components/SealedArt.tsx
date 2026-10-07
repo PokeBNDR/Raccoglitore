@@ -15,6 +15,7 @@ const PATHS: Record<Glyph, string> = {
 	gift: 'M7 17H41V51H7Z M11 21H25V47H11Z M29 25H37 M29 31H37 M29 37H37',
 	tin: 'M12 18h24a5 5 0 0 1 5 5v22a5 5 0 0 1 -5 5h-24a5 5 0 0 1 -5 -5v-22a5 5 0 0 1 5 -5z M7 28H41',
 	deck: 'M11 13H32V55H11Z M11 21H32 M32 18L39 20V51L32 53',
+	coin: 'M24 19a14 14 0 1 0 .01 0 M24 25a8 8 0 1 0 .01 0',
 	other: 'M10 18H38V52H10Z M10 27H38 M21 27V35H27V27',
 }
 
@@ -59,7 +60,7 @@ export function ItemImage({ catalog, sealed, kind, images, lang, quality, alt, h
 }
 
 /** A sealed product in a list: drawing, name, expansion and kind, Cardmarket price, how many you own. */
-export function SealedRow({ product, showExpansion }: { product: SealedProduct; showExpansion?: boolean }) {
+export function SealedRow({ product, showExpansion, setName }: { product: SealedProduct; showExpansion?: boolean; setName?: string }) {
 	const basis = useStore((s) => s.settings.basis)
 	const owned = useStore((s) => s.holdings.reduce((n, h) => (h.catalog === 'sealed' && h.cardId === String(product.id) ? n + h.qty : n), 0))
 	const card = sealedCard(product, 0)
@@ -69,7 +70,9 @@ export function SealedRow({ product, showExpansion }: { product: SealedProduct; 
 			<SealedArt cat={product.cat} kind={product.kind.one} />
 			<span className="mid">
 				<span className="name wrap">{product.name}</span>
-				<span className="sub">{showExpansion && product.expName ? `${product.expName} · ${product.kind.one}` : product.kind.one}</span>
+				<span className="sub">
+					{showExpansion && (setName || product.expName) ? `${setName || product.expName} · ${product.kind.one}` : product.kind.one}
+				</span>
 			</span>
 			<span className="end num">
 				<span className="val">{price != null ? eur(price) : <span className="muted">—</span>}</span>

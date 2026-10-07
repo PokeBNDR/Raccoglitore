@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardTile } from '../components/CardTile'
 import { IconClose, IconSearch } from '../components/Icons'
 import { SealedRow } from '../components/SealedArt'
@@ -7,7 +7,7 @@ import { useAsync, useDebounced } from '../lib/hooks'
 import { CATALOGS } from '../lib/labels'
 import { href } from '../lib/router'
 import { SEARCH_PAGE as PAGE, searchMemo as memo } from '../lib/searchMemo'
-import { loadSealed, searchSealed } from '../lib/sealed'
+import { loadSealed, searchSealed, type SealedProduct } from '../lib/sealed'
 import { getSets, searchCards, type SearchResult } from '../lib/tcgdex'
 import type { Catalog, Source } from '../lib/types'
 
@@ -88,7 +88,12 @@ export function SearchView() {
 	const asian = !sealedMode && catalog !== 'int'
 
 	const index = sealed.data?.index ?? null
-	const products = useMemo(() => (sealedMode && term.length >= 2 ? searchSealed(index, term) : []), [sealedMode, index, term])
+	// Cardmarket names products and expansions in English: the Italian name of the set is searched and shown too.
+	const itName = useCallback((p: SealedProduct) => (p.set?.catalog === 'int' ? setById.get(p.set.id)?.name : undefined), [setById])
+	const products = useMemo(
+		() => (sealedMode && term.length >= 2 ? searchSealed(index, term, itName) : []),
+		[sealedMode, index, term, itName],
+	)
 
 	return (
 		<>
@@ -141,7 +146,7 @@ export function SearchView() {
 						{sealedMode ? (
 							<ul className="small muted" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
 								<li>
-									Il nome dell’espansione, in inglese come su Cardmarket: <b>151</b>, <b>evolving skies</b>
+									Il nome dell’espansione, in italiano o in inglese: <b>151</b>, <b>evoluzioni eteree</b>, <b>evolving skies</b>
 								</li>
 								<li>
 									Aggiungi il tipo di prodotto: <b>151 etb</b>, <b>base set display</b>, <b>busta</b>, <b>tin</b>, <b>collezione</b>
@@ -218,7 +223,7 @@ export function SearchView() {
 									<ul className="rows">
 										{products.slice(0, shown).map((p) => (
 											<li key={p.id}>
-												<SealedRow product={p} showExpansion />
+												<SealedRow product={p} showExpansion setName={itName(p)} />
 											</li>
 										))}
 									</ul>
@@ -230,7 +235,7 @@ export function SearchView() {
 								</>
 							) : (
 								<div className="empty">
-									<p>Nessun prodotto sigillato per «{term}». I nomi sono in inglese, come su Cardmarket.</p>
+									<p>Nessun prodotto sigillato per «{term}». I nomi dei prodotti sono in inglese, come su Cardmarket.</p>
 								</div>
 							)
 						) : null}

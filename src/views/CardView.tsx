@@ -119,7 +119,7 @@ export function CardView({ catalog, id }: { catalog: Source; id: string }) {
 									{[
 										cardNumber(card.localId, card.set.official),
 										card.rarity,
-										card.catalog === 'sealed' ? 'prodotto sigillato' : '',
+										card.catalog === 'sealed' && card.variants[0]?.type === 'sealed' ? 'prodotto sigillato' : '',
 										isAsian(card.catalog) ? `catalogo ${catalogName(card.catalog).toLowerCase()}` : '',
 									]
 										.filter(Boolean)

@@ -27,6 +27,8 @@ describe('file dei prodotti sigillati', () => {
 			'Scarlet & Violet: Paldea Evolved',
 		)
 		expect(expansionLabel(['Pikachu V Box', 'Eevee V Box', 'Pikachu V Box'])).toBe('Pikachu V')
+		// A catch-all expansion of unrelated products gets no name rather than a wrong one.
+		expect(expansionLabel(['Lucario Tin', 'Charizard Premium Collection', 'Kanto Power Mini Tin', 'Lucario Box'])).toBe('')
 		expect(expansionLabel([])).toBe('')
 	})
 	it('sceglie il valore più frequente', () => {
@@ -36,17 +38,19 @@ describe('file dei prodotti sigillati', () => {
 	it('unisce elenco e listino di Cardmarket', () => {
 		expect(file.v).toBe(1)
 		expect(file.updated).toBe('2026-10-06T02:48:24+0200')
-		expect(file.meta).toMatchObject({ products: 14, priced: 13, expansions: 7, mapped: 3 })
+		expect(file.meta).toMatchObject({ products: 16, priced: 15, expansions: 7, mapped: 3 })
+		expect(file.meta?.catCounts).toMatchObject({ 52: 4, 53: 3, 1017: 1, 1083: 1 })
 		// Newest product first; missing figures become 0; the "-holo" columns are not carried over.
 		expect(file.p[0][0]).toBe(900002)
 		expect(file.p.find((r) => r[0] === 271824)).toEqual([271824, 'Base Set Booster Box', 53, 1523, 19020.98, 15000, 19950, 0, 0, 0])
 		expect(file.p.find((r) => r[0] === 733904)).toEqual([733904, '151 Mini Tin', 1014, 5402, 0, 0, 0, 0, 0, 0])
-		expect(file.cats).toMatchObject({ 52: 'Pokémon Booster', 53: 'Pokémon Display', 1016: 'Pokémon Elite Trainer Boxes' })
+		expect(file.cats).toMatchObject({ 52: 'Pokémon Booster', 53: 'Pokémon Display', 1016: 'Pokémon Elite Trainer Boxes', 1017: 'Pokémon Coins' })
 		// A set of the card catalogue gives its name; otherwise the name comes from the products.
 		expect(file.exp[1523]).toEqual({ n: 'Base Set', s: ['int:base1'] })
 		expect(file.exp[5402]).toEqual({ n: '151', s: ['int:sv03.5', 'ja:SV2a'] })
 		expect(file.exp[1521]).toEqual({ n: 'Phantom Forces', s: ['int:xy4'] })
 		expect(file.exp[6030]).toEqual({ n: 'Destined Rivals' })
+		expect(file.exp[7778]).toEqual({ n: "Trainer's Toolkit 2023" })
 		// A mapping to an expansion with no sealed products is dropped.
 		expect(Object.keys(file.exp)).not.toContain('99999')
 	})
@@ -55,11 +59,13 @@ describe('file dei prodotti sigillati', () => {
 describe('prodotti sigillati nell’app', () => {
 	it('i prodotti di un set, in ordine di tipo', () => {
 		const base = sealedOfSet(index, 'int', 'base1')
-		expect(base.map((p) => p.name)).toEqual(['Base Set Booster Box', 'Base Set Booster'])
+		expect(base.map((p) => p.name)).toEqual(['Base Set Booster Box', 'Base Set Booster', 'Base Set: Charizard 1-Pack Blister'])
 		const s151 = sealedOfSet(index, 'int', 'sv03.5')
-		expect(s151.map((p) => p.kind.one)).toEqual(['Busta', 'ETB', 'Collezione', 'Collezione', 'Tin'])
+		// Sealed products first, in the order collectors look for them; coins and the like at the end.
+		expect(s151.map((p) => p.kind.one)).toEqual(['Busta', 'ETB', 'Collezione', 'Collezione', 'Tin', 'Moneta'])
+		expect(s151.map((p) => !!p.kind.extra)).toEqual([false, false, false, false, false, true])
 		// The same expansion can belong to a set of another catalogue too.
-		expect(sealedOfSet(index, 'ja', 'SV2a')).toHaveLength(5)
+		expect(sealedOfSet(index, 'ja', 'SV2a')).toHaveLength(6)
 		expect(sealedOfSet(index, 'int', 'sv10')).toEqual([])
 		expect(sealedOfSet(null, 'int', 'base1')).toEqual([])
 	})
@@ -75,12 +81,22 @@ describe('prodotti sigillati nell’app', () => {
 		expect(searchSealed(index, 'collezione 151').map((p) => p.id)).toEqual([733902, 733900])
 		expect(searchSealed(index, 'tin').map((p) => p.id)).toEqual([733904])
 		expect(searchSealed(index, 'BOOSTER').length).toBe(8)
+		expect(searchSealed(index, 'blister').map((p) => p.id)).toEqual([271830])
+		// Newest first, but what is not a sealed product comes last.
+		expect(searchSealed(index, '151').map((p) => p.id)).toEqual([733904, 733903, 733902, 733901, 733900, 733905])
+		expect(searchSealed(index, 'moneta').map((p) => p.id)).toEqual([733905])
+		// With the Italian names of the sets at hand, those are searched too.
+		const it = (p: { set?: { id: string } }) => (p.set?.id === 'xy4' ? 'Forze Spettrali' : undefined)
+		expect(searchSealed(index, 'forze spettrali busta')).toEqual([])
+		expect(searchSealed(index, 'forze spettrali busta', it).map((p) => p.id)).toEqual([271439])
 		expect(searchSealed(index, 'zzz')).toEqual([])
 		expect(searchSealed(index, '  ')).toEqual([])
 	})
 	it('i tipi che l’app non conosce tengono il nome di Cardmarket', () => {
 		expect(catInfo(53).one).toBe('Display')
-		expect(catInfo(1234, 'Pokémon Coins')).toMatchObject({ one: 'Coins', glyph: 'other' })
+		expect(catInfo(1083)).toMatchObject({ one: 'Blister', glyph: 'pack' })
+		expect(catInfo(1017)).toMatchObject({ one: 'Moneta', extra: true })
+		expect(catInfo(1234, 'Pokémon Playmats')).toMatchObject({ one: 'Playmats', glyph: 'other' })
 		expect(catInfo(undefined).one).toBe('Prodotto')
 	})
 
@@ -127,6 +143,10 @@ describe('prodotti sigillati nell’app', () => {
 		})
 		expect(card.variants).toHaveLength(1)
 		expect(variantLabel(card.variants[0])).toBe('Sigillato')
+		// A coin is listed with the sealed products but is not one.
+		const coin = sealedCard(index.byId.get(733905)!, 0)
+		expect(coin.rarity).toBe('Moneta')
+		expect(variantLabel(coin.variants[0])).toBe('Prodotto')
 		expect(card.cm).toMatchObject({ idProduct: 733901, trend: 121.9, avg7: 120.2, avg30: 117.6, low: 95 })
 	})
 	it('valore: prezzo Cardmarket × lingua, la condizione non conta', () => {

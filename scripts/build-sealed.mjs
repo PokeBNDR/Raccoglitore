@@ -57,13 +57,16 @@ export function expansionLabel(names) {
 	while (n < first.length && words.every((w) => w[n] !== undefined && w[n].toLowerCase() === first[n].toLowerCase())) n++
 	const prefix = clean(first.slice(0, n).join(' '))
 	if (prefix.length >= 3) return prefix
-	// No shared beginning: take the most common name once the kind of product is removed.
+	// No shared beginning: take the name most products have once the kind of product is removed,
+	// but only if most of them do. Cardmarket also has catch-all expansions holding hundreds of
+	// unrelated boxes and tins: those get no name rather than a misleading one.
 	const count = new Map()
 	for (const name of list) {
 		const c = clean(name)
 		if (c.length >= 3) count.set(c, (count.get(c) ?? 0) + 1)
 	}
-	return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0]?.[0] ?? ''
+	const best = [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0]
+	return best && best[1] / list.length > 0.5 ? best[0] : ''
 }
 
 /** The most frequent value of a list, or undefined when the list is empty. */
@@ -114,7 +117,7 @@ export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookup
 	for (const [id, productNames] of byExp) {
 		const keys = (setsOfExp.get(id) ?? []).sort()
 		const intKey = keys.find((k) => k.startsWith('int:'))
-		const entry = { n: (intKey && names[intKey]) || expansionLabel(productNames) || `Espansione ${id}` }
+		const entry = { n: (intKey && names[intKey]) || expansionLabel(productNames) }
 		if (keys.length) {
 			entry.s = keys
 			mapped++

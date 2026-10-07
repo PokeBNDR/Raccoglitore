@@ -392,7 +392,11 @@ try {
 	const heads = await page.locator('.grouphead').allInnerTexts()
 	ok(
 		'set: i prodotti sigillati dell’espansione, raggruppati per tipo',
-		sealedNames.join('|') === 'Base Set Booster Box|Base Set Booster' && heads.length === 2 && /display/i.test(heads[0]) && /buste/i.test(heads[1]),
+		sealedNames.join('|') === 'Base Set Booster Box|Base Set Booster|Base Set: Charizard 1-Pack Blister' &&
+			heads.length === 3 &&
+			/display/i.test(heads[0]) &&
+			/buste/i.test(heads[1]) &&
+			/blister/i.test(heads[2]),
 		`${sealedNames.join(', ')} — ${heads.join(', ')}`,
 	)
 	await shot('13-set-sigillati')
