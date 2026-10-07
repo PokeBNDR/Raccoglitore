@@ -39,7 +39,9 @@ Una pagina web non può leggere i file di Cardmarket direttamente. Li legge `scr
 costruito (a ogni modifica e ogni mattina) e ne ricava `data/sealed.json`, che l'app carica dal proprio indirizzo.
 Le espansioni di Cardmarket sono collegate ai set del catalogo con `scripts/expansions-seed.json` e, per i set che lì
 mancano, guardando a quale espansione appartengono le loro carte. Quanto è completo il risultato (quanti set hanno i loro
-sigillati, quali no e perché) è scritto in `data/sealed-report.json`, pubblicato accanto all'elenco.
+sigillati, quali no e perché) è scritto in `data/sealed-report.json`, pubblicato accanto all'elenco, con
+`data/sealed-links.json` (ogni set con le sue espansioni) e `data/sealed-orphans.json` (le espansioni ancora senza set).
+A ogni pubblicazione gli stessi file vengono copiati anche nel ramo `rapporti` del repository, dove si leggono per intero.
 
 ### Prezzi per lingua: prova con CardTrader
 
