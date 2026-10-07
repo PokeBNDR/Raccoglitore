@@ -80,10 +80,13 @@ export function majority(list) {
 	return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
 }
 
+/** The expansions of a set: one number, or a list when its sealed products are spread over several. */
+const expsOf = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter((e) => typeof e === 'number' && e > 0)
+
 /**
  * Joins Cardmarket's product list and price guide into the file the app reads.
- * `sets` maps "catalogue:setId" (as in the app) to a Cardmarket expansion id; `names` gives the
- * English name of the international sets.
+ * `sets` maps "catalogue:setId" (as in the app) to a Cardmarket expansion id, or to a list of
+ * them; `names` gives the English name of the international sets.
  */
 export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookups = {}, now = new Date() }) {
 	const priceById = new Map()
@@ -111,10 +114,12 @@ export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookup
 	rows.sort((a, b) => b[0] - a[0])
 
 	const setsOfExp = new Map()
-	for (const [key, exp] of Object.entries(sets)) {
-		if (!exp || !byExp.has(exp)) continue
-		if (!setsOfExp.has(exp)) setsOfExp.set(exp, [])
-		setsOfExp.get(exp).push(key)
+	for (const [key, value] of Object.entries(sets)) {
+		for (const exp of expsOf(value)) {
+			if (!byExp.has(exp)) continue
+			if (!setsOfExp.has(exp)) setsOfExp.set(exp, [])
+			if (!setsOfExp.get(exp).includes(key)) setsOfExp.get(exp).push(key)
+		}
 	}
 	const exp = {}
 	let mapped = 0
@@ -144,29 +149,71 @@ export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookup
 }
 
 /**
- * Which Cardmarket expansion each set belongs to. There are two sources: the seed file, taken from
- * the open card database (where a few entries turned out to be wrong: two different sets pointing
- * to the same expansion), and what the cards of the set say, through Cardmarket's own list of
- * single cards. When the cards speak clearly, they win.
- * `known` is the seed ("catalogue:setId" → expansion); `lookups` what the cards said:
- * { e: expansion (0 when unknown), n: cards in favour, t: cards asked }.
+ * The seed file: one block per catalogue ("int", "ja") giving "set id": expansion, and "extra",
+ * giving "catalogue:set id": [second expansions]. Anything else in it (the notes) is skipped.
  */
-export function resolveLinks({ known = {}, lookups = {} }) {
+export function readSeed(seed) {
+	const known = {}
+	const extra = {}
+	for (const [catalog, map] of Object.entries(seed ?? {})) {
+		if (!map || typeof map !== 'object' || Array.isArray(map)) continue
+		if (catalog === 'extra') {
+			for (const [key, list] of Object.entries(map)) if (expsOf(list).length) extra[key] = expsOf(list)
+			continue
+		}
+		for (const [setId, exp] of Object.entries(map)) if (typeof exp === 'number' && exp > 0) known[`${catalog}:${setId}`] = exp
+	}
+	return { known, extra }
+}
+
+/**
+ * Which Cardmarket expansion each set belongs to. There are two sources: the seed file, started
+ * from the open card database (where a few entries turned out to be wrong: two different sets
+ * pointing to the same expansion), and what the cards of the set say, through Cardmarket's own
+ * list of single cards. When the cards speak clearly they win, with one exception (see below).
+ * `known` is the seed ("catalogue:setId" → expansion); `lookups` what the cards said:
+ * { e: expansion (0 when unknown), n: cards in favour, t: cards asked }; `extra` adds to a set
+ * the expansions where Cardmarket keeps some of its sealed products apart; `hasSealed` says
+ * whether an expansion has sealed products at all.
+ */
+export function resolveLinks({ known = {}, lookups = {}, extra = {}, hasSealed = () => true }) {
+	const cat = (key) => key.slice(0, key.indexOf(':'))
 	const sets = {}
 	const conflicts = []
-	const stats = { seed: Object.keys(known).length, confirmed: 0, corrected: 0, unverified: 0, weak: 0, fromCards: 0 }
+	const refused = []
+	const stats = { seed: Object.keys(known).length, confirmed: 0, corrected: 0, refused: 0, unverified: 0, weak: 0, fromCards: 0 }
+	// The expansions that a set's own cards confirm for it, and how many sets the seed gives each one.
+	const confirmedFor = new Map()
+	const claims = new Map()
+	for (const [key, seedExp] of Object.entries(known)) {
+		claims.set(seedExp, (claims.get(seedExp) ?? 0) + 1)
+		if ((lookups[key]?.e || 0) === seedExp) confirmedFor.set(`${cat(key)}:${seedExp}`, key)
+	}
 	for (const [key, seedExp] of Object.entries(known)) {
 		const l = lookups[key]
 		const viaCards = l?.e || 0
 		// One card alone, or a narrow majority, is not enough to overrule the seed.
 		const clear = viaCards && (l.n ?? 0) >= 2 && (l.n ?? 0) * 2 > (l.t ?? 0)
+		sets[key] = seedExp
 		if (!viaCards) stats.unverified++
 		else if (viaCards === seedExp) stats.confirmed++
-		else if (clear) {
-			stats.corrected++
-			conflicts.push([key, seedExp, viaCards])
-		} else stats.weak++
-		sets[key] = viaCards && viaCards !== seedExp && clear ? viaCards : seedExp
+		else if (!clear) stats.weak++
+		else {
+			// The exception. The cards point to the expansion of another set, one its own cards
+			// confirm, and following them would leave the seed's expansion, which has sealed
+			// products, without any set. Then it is the catalogue that has the wrong Cardmarket
+			// products for these cards (it happens: a whole set carrying the products of the set
+			// before it), not the seed.
+			const other = confirmedFor.get(`${cat(key)}:${viaCards}`)
+			if (other && other !== key && claims.get(seedExp) === 1 && hasSealed(seedExp)) {
+				stats.refused++
+				refused.push([key, seedExp, viaCards])
+			} else {
+				stats.corrected++
+				conflicts.push([key, seedExp, viaCards])
+				sets[key] = viaCards
+			}
+		}
 	}
 	for (const [key, l] of Object.entries(lookups)) {
 		if (!l?.e || key in known) continue
@@ -176,7 +223,7 @@ export function resolveLinks({ known = {}, lookups = {} }) {
 	// Sets of one catalogue sharing an expansion: right for a subset of a set, wrong otherwise.
 	const byExp = new Map()
 	for (const [key, exp] of Object.entries(sets)) {
-		const id = `${key.slice(0, key.indexOf(':'))}:${exp}`
+		const id = `${cat(key)}:${exp}`
 		if (!byExp.has(id)) byExp.set(id, [])
 		byExp.get(id).push(key)
 	}
@@ -184,7 +231,12 @@ export function resolveLinks({ known = {}, lookups = {} }) {
 		.filter(([, keys]) => keys.length > 1)
 		.map(([id, keys]) => [Number(id.slice(id.indexOf(':') + 1)), keys.sort()])
 		.sort((a, b) => a[0] - b[0])
-	return { sets, conflicts, shared, stats }
+	// The second expansions come last, so that the first of the list stays the one of the cards.
+	for (const [key, list] of Object.entries(extra)) {
+		const more = expsOf(list).filter((e) => e !== sets[key])
+		if (more.length) sets[key] = [...expsOf(sets[key]), ...more]
+	}
+	return { sets, conflicts, refused, shared, stats }
 }
 
 /** At most `max` items of a list, with the number left out when it is longer. */
@@ -219,9 +271,14 @@ export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys 
 		const label = (id) => data?.exp?.[id]?.n ?? (perExp.has(id) ? '' : '(nessun sigillato)')
 		out.links = {
 			...links.stats,
-			// Where the cards of a set pointed to another expansion than the seed file: [set, seed, its name, cards, its name].
+			// Where the cards of a set pointed to another expansion than the seed file, and won: [set, seed, its name, cards, its name].
 			conflicts: capped(
 				links.conflicts.map(([key, a, b]) => [key, a, label(a), b, label(b)]),
+				60,
+			),
+			// Where they were not followed, because the catalogue has the wrong products for those cards.
+			notFollowed: capped(
+				(links.refused ?? []).map(([key, a, b]) => [key, a, label(a), b, label(b)]),
 				60,
 			),
 			// Sets of the same catalogue on one expansion: [expansion, its name, sets].
@@ -241,15 +298,15 @@ export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys 
 		for (const s of list ?? []) {
 			const key = `${cat}:${s.id}`
 			const label = `${s.id}|${s.name ?? ''}`
-			const exp = sets[key]
-			if (!exp) {
+			const exps = expsOf(sets[key])
+			if (!exps.length) {
 				// Looked up and not found on Cardmarket, or not looked up yet.
 				if (lookups[key] && !lookups[key].e) unmatched.push(label)
 				else pending.push(label)
 				continue
 			}
 			linked++
-			const n = perExp.get(exp) ?? 0
+			const n = exps.reduce((sum, e) => sum + (perExp.get(e) ?? 0), 0)
 			if (n) {
 				withProducts++
 				products += n
@@ -301,6 +358,21 @@ export function listOrphans(data) {
 		.filter(([, e]) => !e?.s?.length)
 		.map(([id, e]) => [Number(id), e?.n ?? '', count.get(Number(id)) ?? 0, String(example.get(Number(id)) ?? '').slice(0, 60)])
 		.sort((a, b) => a[0] - b[0])
+}
+
+/**
+ * Every set with the expansions it is linked to: [set, its name, [expansion, its name, products]…].
+ * A third file to read by eye: a Japanese set next to the English name of its expansion says at
+ * once whether the link is right.
+ */
+export function listLinks({ data, sets = {}, catalog = {} }) {
+	const count = new Map()
+	for (const row of data?.p ?? []) count.set(row[3], (count.get(row[3]) ?? 0) + 1)
+	const name = new Map()
+	for (const [cat, list] of Object.entries(catalog)) for (const s of list ?? []) name.set(`${cat}:${s.id}`, s.name ?? '')
+	return Object.entries(sets)
+		.map(([key, value]) => [key, name.get(key) ?? '', ...expsOf(value).map((e) => [e, data?.exp?.[e]?.n ?? '', count.get(e) ?? 0])])
+		.sort((a, b) => (a[0] < b[0] ? -1 : 1))
 }
 
 // ------------------------------------------------------------------ reading
@@ -464,6 +536,7 @@ export async function main() {
 
 	let data
 	let report = null
+	let linkRows = null
 	try {
 		const [nonsingles, prices, seed] = await Promise.all([
 			load(SRC.nonsingles),
@@ -473,11 +546,7 @@ export async function main() {
 		if (!nonsingles?.products?.length) throw new Error('elenco dei prodotti vuoto')
 		if (!prices?.priceGuides?.length) throw new Error('listino vuoto')
 
-		const known = {}
-		for (const [catalog, map] of Object.entries(seed ?? {})) {
-			if (!map || typeof map !== 'object') continue
-			for (const [setId, exp] of Object.entries(map)) if (typeof exp === 'number') known[`${catalog}:${setId}`] = exp
-		}
+		const { known, extra } = readSeed(seed)
 
 		let lookups = previous?.lookups && typeof previous.lookups === 'object' ? previous.lookups : {}
 		let tried = 0
@@ -495,7 +564,8 @@ export async function main() {
 				log(`ricerca delle espansioni: ${err.message}`)
 			}
 		}
-		const links = resolveLinks({ known, lookups })
+		const sealedExps = new Set(nonsingles.products.map((p) => Number(p?.idExpansion) || 0))
+		const links = resolveLinks({ known, lookups, extra, hasSealed: (e) => sealedExps.has(e) })
 		const sets = links.sets
 
 		// English names of the international sets, for the expansions' labels.
@@ -516,6 +586,7 @@ export async function main() {
 			// The columns Cardmarket's files have today, to notice when they change.
 			keys: { product: Object.keys(nonsingles.products[0] ?? {}), price: Object.keys(prices.priceGuides[0] ?? {}) },
 		})
+		linkRows = listLinks({ data, sets, catalog })
 	} catch (err) {
 		console.warn('! Cardmarket non letto: ' + (err?.message ?? err))
 		if (previous) {
@@ -542,6 +613,7 @@ export async function main() {
 	await mkdir(dirname(REPORT), { recursive: true })
 	await writeFile(REPORT, JSON.stringify(report ?? buildReport({ data })))
 	await writeFile(resolve(dirname(REPORT), 'sealed-orphans.json'), JSON.stringify({ v: 1, built: data.built ?? null, rows: listOrphans(data) }))
+	if (linkRows) await writeFile(resolve(dirname(REPORT), 'sealed-links.json'), JSON.stringify({ v: 1, built: data.built ?? null, rows: linkRows }))
 	const m = data.meta ?? {}
 	console.log(
 		`Sigillati: ${m.products ?? 0} prodotti (${m.priced ?? 0} con prezzo), ${m.expansions ?? 0} espansioni di cui ${m.mapped ?? 0} collegate a un set; listino del ${data.updated ?? '—'}; ${(text.length / 1024).toFixed(0)} kB → ${OUT}`,

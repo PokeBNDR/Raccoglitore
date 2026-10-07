@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildDataset, buildReport, expansionLabel, listOrphans, majority, resolveLinks } from '../scripts/build-sealed.mjs'
+import { buildDataset, buildReport, expansionLabel, listLinks, listOrphans, majority, readSeed, resolveLinks } from '../scripts/build-sealed.mjs'
 import { DEFAULT_SETTINGS, isAsian, variantLabel } from '../src/lib/labels'
 import { cardmarketUrl, ebaySoldUrl, namedOf } from '../src/lib/links'
 import { unitValue } from '../src/lib/pricing'
@@ -85,7 +85,8 @@ describe('file dei prodotti sigillati', () => {
 			'int:new1': 6700,
 		})
 		expect(links.conflicts).toEqual([['ja:S11', 5257, 5090]])
-		expect(links.stats).toEqual({ seed: 8, confirmed: 3, corrected: 1, unverified: 2, weak: 2, fromCards: 1 })
+		expect(links.refused).toEqual([])
+		expect(links.stats).toEqual({ seed: 8, confirmed: 3, corrected: 1, refused: 0, unverified: 2, weak: 2, fromCards: 1 })
 		// What still shares an expansion within one catalogue, to be looked at by hand.
 		expect(links.shared).toEqual([
 			[1548, ['int:ex10', 'int:exu']],
@@ -94,6 +95,102 @@ describe('file dei prodotti sigillati', () => {
 		// The same expansion in two catalogues is not a sharing: it is how a common release looks.
 		expect(resolveLinks({ known: { 'int:a': 1, 'ja:a': 1 } }).shared).toEqual([])
 		expect(resolveLinks({})).toMatchObject({ sets: {}, conflicts: [], shared: [] })
+	})
+	it('collegamenti: le carte non vincono se portano i prodotti di un altro set', () => {
+		// In the open database the cards of EX Team Magma vs Team Aqua carry the Cardmarket products
+		// of Sandstorm: following them would show Sandstorm's boxes and leave the right ones with no set.
+		const known = { 'int:ex2': 1540, 'int:ex4': 1542, 'int:tk-a': 9000, 'int:tk-b': 1626, 'ja:S5I': 3712, 'ja:S5R': 3697, 'ja:S11': 5257, 'ja:SV1a': 5257 }
+		const lookups = {
+			'int:ex2': { e: 1540, d: '2026-10-08', n: 4, t: 4 },
+			'int:ex4': { e: 1540, d: '2026-10-08', n: 4, t: 4 },
+			// The seed pointed to something with no sealed product: nothing is lost by following the cards.
+			'int:tk-a': { e: 1626, d: '2026-10-08', n: 3, t: 3 },
+			'int:tk-b': { e: 1626, d: '2026-10-08', n: 3, t: 3 },
+			'ja:S5I': { e: 3712, d: '2026-10-08', n: 4, t: 4 },
+			'ja:S5R': { e: 3712, d: '2026-10-08', n: 4, t: 4 },
+			// Two sets on the seed's expansion: leaving it does not empty it.
+			'ja:S11': { e: 5094, d: '2026-10-08', n: 4, t: 4 },
+			'ja:SV1a': { e: 5257, d: '2026-10-08', n: 4, t: 4 },
+		}
+		const sealed = new Set([1540, 1542, 1626, 3697, 3712, 5094, 5257])
+		const links = resolveLinks({ known, lookups, hasSealed: (e) => sealed.has(e) })
+		expect(links.sets).toMatchObject({ 'int:ex2': 1540, 'int:ex4': 1542, 'int:tk-a': 1626, 'int:tk-b': 1626, 'ja:S5I': 3712, 'ja:S5R': 3697, 'ja:S11': 5094, 'ja:SV1a': 5257 })
+		expect(links.refused).toEqual([
+			['int:ex4', 1542, 1540],
+			['ja:S5R', 3697, 3712],
+		])
+		expect(links.conflicts).toEqual([
+			['int:tk-a', 9000, 1626],
+			['ja:S11', 5257, 5094],
+		])
+		expect(links.stats).toMatchObject({ confirmed: 4, corrected: 2, refused: 2 })
+	})
+	it('collegamenti: un set può avere i sigillati in una seconda espansione', () => {
+		const links = resolveLinks({
+			known: { 'ja:S3a': 3387, 'ja:S6a': 4239 },
+			lookups: { 'ja:S3a': { e: 3387, d: '2026-10-08', n: 4, t: 4 }, 'ja:new': { e: 7000, d: '2026-10-08' } },
+			extra: { 'ja:S3a': [3384], 'ja:S6a': [4240, 4239], 'ja:new': [7001], 'ja:only': [7002] },
+		})
+		// The expansion of the cards stays first; one already there is not repeated.
+		expect(links.sets).toEqual({ 'ja:S3a': [3387, 3384], 'ja:S6a': [4239, 4240], 'ja:new': [7000, 7001], 'ja:only': [7002] })
+		// A second expansion is not a sharing between sets.
+		expect(links.shared).toEqual([])
+	})
+	it('legge il file dei collegamenti: cataloghi, seconde espansioni, note', () => {
+		expect(
+			readSeed({
+				'//': ['una nota', 'un’altra'],
+				int: { base1: 1523, wrong: 'x', zero: 0 },
+				ja: { S3a: 3387 },
+				extra: { 'ja:S3a': [3384], 'ja:bad': 'x', 'ja:none': [] },
+			}),
+		).toEqual({ known: { 'int:base1': 1523, 'ja:S3a': 3387 }, extra: { 'ja:S3a': [3384] } })
+		expect(readSeed(null)).toEqual({ known: {}, extra: {} })
+		// The file in the repository: every link is a number, no set is given twice within a catalogue by mistake.
+		const real = readSeed(JSON.parse(readFileSync(new URL('../scripts/expansions-seed.json', import.meta.url), 'utf8')))
+		expect(Object.keys(real.known).length).toBeGreaterThan(250)
+		expect(real.known).toMatchObject({ 'int:base1': 1523, 'int:ex4': 1542, 'int:swsh10.5': 5051, 'ja:S5I': 3712, 'ja:S5R': 3697, 'ja:S6a': 4239 })
+		expect(real.extra).toEqual({ 'ja:S3a': [3384], 'ja:S6a': [4240] })
+		for (const exp of Object.values(real.known)) expect(exp).toBeLessThan(100000)
+		// The only expansions shared within a catalogue are a set and its own subset or twin kit.
+		const by = new Map<string, string[]>()
+		for (const [key, exp] of Object.entries(real.known)) {
+			const id = `${key.split(':')[0]}:${exp}`
+			by.set(id, [...(by.get(id) ?? []), key])
+		}
+		expect([...by.values()].filter((l) => l.length > 1).map((l) => l.sort().join('+')).sort()).toEqual([
+			'int:30th+int:30th-c',
+			'int:bw11+int:rc',
+			'int:sm115+int:sma',
+			'int:tk-xy-b+int:tk-xy-w',
+			'int:tk-xy-latia+int:tk-xy-latio',
+			'int:tk-xy-n+int:tk-xy-sy',
+			'int:tk-xy-p+int:tk-xy-su',
+		].sort())
+	})
+	it('un set con due espansioni mostra i prodotti di entrambe', () => {
+		const two = buildDataset({
+			nonsingles: fixture('nonsingles'),
+			prices: fixture('prices'),
+			sets: { 'int:base1': [1523, 6030], 'int:xy4': 1521, 'int:nowhere': [99999] },
+			names: { 'int:base1': 'Base Set' },
+			now: new Date('2026-10-07T04:00:00Z'),
+		}) as SealedFile
+		expect(two.exp[1523]).toEqual({ n: 'Base Set', s: ['int:base1'] })
+		expect(two.exp[6030].s).toEqual(['int:base1'])
+		const idx = buildIndex(two)
+		expect(sealedOfSet(idx, 'int', 'base1').map((p) => p.exp).sort()).toEqual(
+			two.p.filter((r) => r[3] === 1523 || r[3] === 6030).map((r) => r[3]).sort(),
+		)
+		const report = buildReport({ data: two, sets: { 'int:base1': [1523, 6030], 'int:nowhere': [99999] }, catalog: { int: [{ id: 'base1', name: 'Base Set' }, { id: 'nowhere', name: 'Promo' }] } })
+		expect(report.sets.int).toMatchObject({ total: 2, linked: 2, withProducts: 1, empty: ['nowhere|Promo'] })
+		expect(report.sets.int.products).toBe(two.p.filter((r) => r[3] === 1523 || r[3] === 6030).length)
+		// The list to read by eye: set, its name, then each expansion with name and number of products.
+		const rows = listLinks({ data: two, sets: { 'int:base1': [1523, 6030], 'int:xy4': 1521 }, catalog: { int: [{ id: 'base1', name: 'Base Set' }] } })
+		expect(rows[0][0]).toBe('int:base1')
+		expect(rows[0][1]).toBe('Base Set')
+		expect(rows[0].slice(2).map((e) => (e as [number, string, number])[0])).toEqual([1523, 6030])
+		expect(rows[1]).toEqual(['int:xy4', '', [1521, 'Phantom Forces', two.p.filter((r) => r[3] === 1521).length]])
 	})
 	it('elenca le espansioni che nessun set indica, con un prodotto d’esempio', () => {
 		const rows = listOrphans(file)
@@ -148,6 +245,8 @@ describe('file dei prodotti sigillati', () => {
 		// The expansions are named, so that a wrong link can be recognised at a glance.
 		expect(withLinks.links).toMatchObject({ seed: 2, corrected: 1, unverified: 1, fromCards: 2 })
 		expect(withLinks.links?.conflicts).toEqual([['int:base1', 1521, 'Phantom Forces', 1523, 'Base Set']])
+		expect(withLinks.links?.refused).toBe(0)
+		expect(withLinks.links?.notFollowed).toEqual([])
 		expect(withLinks.links?.shared).toEqual([[5402, '151', ['int:b', 'int:sv03.5']]])
 		// A long list is cut, saying how much is left out.
 		const many = buildReport({ data: file, catalog: { int: Array.from({ length: 130 }, (_, i) => ({ id: `s${i}`, name: '' })) } })

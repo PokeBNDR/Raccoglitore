@@ -15,7 +15,7 @@ export function majority<T>(list: T[]): T | undefined
 export function buildDataset(input: {
 	nonsingles: unknown
 	prices: unknown
-	sets?: Record<string, number>
+	sets?: Record<string, number | number[]>
 	names?: Record<string, string>
 	lookups?: Record<string, Lookup>
 	now?: Date
@@ -37,13 +37,13 @@ export interface SealedReport {
 	>
 	orphans: { expansions: number; products: number; unnamed: number; top: Array<[number, string, number]> }
 	lookups: { tried: number; resolved: number; left: number }
-	links?: Links['stats'] & { conflicts: unknown[]; shared: unknown[] }
+	links?: Links['stats'] & { conflicts: unknown[]; notFollowed: unknown[]; shared: unknown[] }
 	keys: Record<string, string[]>
 	errors: string[]
 }
 export function buildReport(input: {
 	data: SealedFile
-	sets?: Record<string, number>
+	sets?: Record<string, number | number[]>
 	catalog?: Record<string, Array<{ id: string; name: string }>>
 	lookups?: Record<string, Lookup>
 	keys?: Record<string, string[]>
@@ -56,11 +56,23 @@ export interface Lookup {
 	t?: number
 }
 export interface Links {
-	sets: Record<string, number>
+	sets: Record<string, number | number[]>
 	conflicts: Array<[string, number, number]>
+	refused: Array<[string, number, number]>
 	shared: Array<[number, string[]]>
-	stats: { seed: number; confirmed: number; corrected: number; unverified: number; weak: number; fromCards: number }
+	stats: { seed: number; confirmed: number; corrected: number; refused: number; unverified: number; weak: number; fromCards: number }
 }
-export function resolveLinks(input: { known?: Record<string, number>; lookups?: Record<string, Lookup> }): Links
+export function readSeed(seed: unknown): { known: Record<string, number>; extra: Record<string, number[]> }
+export function resolveLinks(input: {
+	known?: Record<string, number>
+	lookups?: Record<string, Lookup>
+	extra?: Record<string, number[]>
+	hasSealed?: (expansion: number) => boolean
+}): Links
+export function listLinks(input: {
+	data: SealedFile
+	sets?: Record<string, number | number[]>
+	catalog?: Record<string, Array<{ id: string; name: string }>>
+}): Array<[string, string, ...Array<[number, string, number]>]>
 export function listOrphans(data: SealedFile): Array<[number, string, number, string]>
 export function main(): Promise<SealedFile>
