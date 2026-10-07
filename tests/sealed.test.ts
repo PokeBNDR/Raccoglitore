@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildDataset, expansionLabel, majority } from '../scripts/build-sealed.mjs'
+import { buildDataset, buildReport, expansionLabel, majority } from '../scripts/build-sealed.mjs'
 import { DEFAULT_SETTINGS, isAsian, variantLabel } from '../src/lib/labels'
 import { cardmarketUrl, ebaySoldUrl, namedOf } from '../src/lib/links'
 import { unitValue } from '../src/lib/pricing'
@@ -53,6 +53,46 @@ describe('file dei prodotti sigillati', () => {
 		expect(file.exp[7778]).toEqual({ n: "Trainer's Toolkit 2023" })
 		// A mapping to an expansion with no sealed products is dropped.
 		expect(Object.keys(file.exp)).not.toContain('99999')
+	})
+	it('dice quanto è completo: set collegati, senza prodotti, non trovati, ancora da cercare', () => {
+		const report = buildReport({
+			data: file,
+			sets: { 'int:base1': 1523, 'int:xy4': 1521, 'int:sv03.5': 5402, 'ja:SV2a': 5402, 'int:nowhere': 99999 },
+			catalog: {
+				int: [
+					{ id: 'base1', name: 'Base Set' },
+					{ id: 'xy4', name: 'Phantom Forces' },
+					{ id: 'sv03.5', name: '151' },
+					{ id: 'nowhere', name: 'Promo' },
+					{ id: 'ghost', name: 'Ghost Set' },
+					{ id: 'new', name: 'New Set' },
+				],
+				ja: [{ id: 'SV2a', name: 'ポケモンカード151' }],
+			},
+			lookups: { 'int:ghost': { e: 0, d: '2026-10-07' } },
+			keys: { price: ['idProduct', 'trend'] },
+		})
+		expect(report).toMatchObject({ v: 1, updated: '2026-10-06T02:48:24+0200', stale: false, products: 16, priced: 15, expansions: 7, linked: 3 })
+		expect(report.sets.int).toMatchObject({ total: 6, linked: 4, withProducts: 3 })
+		// Linked to an expansion Cardmarket has no sealed product for.
+		expect(report.sets.int.empty).toEqual(['nowhere|Promo'])
+		// Looked up, and Cardmarket does not know its cards.
+		expect(report.sets.int.unmatched).toEqual(['ghost|Ghost Set'])
+		// Not looked up yet.
+		expect(report.sets.int.pending).toEqual(['new|New Set'])
+		expect(report.sets.ja).toMatchObject({ total: 1, linked: 1, withProducts: 1, empty: [], unmatched: [], pending: [] })
+		// The products of a set are counted once per catalogue it belongs to.
+		expect(report.sets.int.products).toBe(file.p.filter((r) => [1523, 1521, 5402].includes(r[3])).length)
+		// Expansions no set points to, the ones with more products first.
+		expect(report.orphans.expansions).toBe(4)
+		expect(report.orphans.products).toBe(file.p.filter((r) => ![1523, 1521, 5402].includes(r[3])).length)
+		expect(report.orphans.top[0][2]).toBeGreaterThanOrEqual(report.orphans.top[1][2])
+		expect(report.orphans.top.map((o) => o[0])).toContain(6030)
+		expect(report.keys).toEqual({ price: ['idProduct', 'trend'] })
+		// A long list is cut, saying how much is left out.
+		const many = buildReport({ data: file, catalog: { int: Array.from({ length: 130 }, (_, i) => ({ id: `s${i}`, name: '' })) } })
+		expect(many.sets.int.pending).toHaveLength(121)
+		expect(many.sets.int.pending[120]).toBe('…e altri 10')
 	})
 })
 

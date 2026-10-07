@@ -20,4 +20,31 @@ export function buildDataset(input: {
 	lookups?: Record<string, { e: number; d: string }>
 	now?: Date
 }): SealedFile
+/** How complete the list is, set by set (sealed-report.json). */
+export interface SealedReport {
+	v: number
+	built: string | null
+	updated: string | null
+	stale: boolean
+	products: number
+	priced: number
+	expansions: number
+	linked: number
+	catCounts: Record<string, number>
+	sets: Record<
+		string,
+		{ total: number; linked: number; withProducts: number; products: number; empty: string[]; unmatched: string[]; pending: string[] }
+	>
+	orphans: { expansions: number; products: number; unnamed: number; top: Array<[number, string, number]> }
+	lookups: { tried: number; resolved: number }
+	keys: Record<string, string[]>
+	errors: string[]
+}
+export function buildReport(input: {
+	data: SealedFile
+	sets?: Record<string, number>
+	catalog?: Record<string, Array<{ id: string; name: string }>>
+	lookups?: Record<string, { e: number; d: string }>
+	keys?: Record<string, string[]>
+}): SealedReport
 export function main(): Promise<SealedFile>

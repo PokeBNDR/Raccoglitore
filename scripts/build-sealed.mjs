@@ -7,6 +7,9 @@
 //
 //   node scripts/build-sealed.mjs
 //
+// Next to it goes sealed-report.json, a few kB that say how complete the result is: how many sets of
+// the card catalogue have their sealed products, which ones do not and why.
+//
 // It never fails the build: if Cardmarket cannot be reached, the file published last time is kept.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -22,6 +25,7 @@ const SRC = {
 const TCGDEX = (process.env.TCGDEX_API || 'https://api.tcgdex.net/v2').replace(/\/$/, '')
 const PREVIOUS = process.env.PREVIOUS_URL || ''
 const OUT = resolve(process.env.OUT || resolve(HERE, '../public/data/sealed.json'))
+const REPORT = resolve(process.env.REPORT || resolve(dirname(OUT), 'sealed-report.json'))
 const SEED = resolve(process.env.SEED || resolve(HERE, 'expansions-seed.json'))
 /** How long the set-by-set lookups may take in one run. What is left is done at the next build. */
 const LOOKUP_BUDGET_MS = Number(process.env.LOOKUP_BUDGET_MS || 150_000)
@@ -139,6 +143,86 @@ export function buildDataset({ nonsingles, prices, sets = {}, names = {}, lookup
 	}
 }
 
+/** At most `max` items of a list, with the number left out when it is longer. */
+const capped = (list, max) => (list.length > max ? [...list.slice(0, max), `…e altri ${list.length - max}`] : list)
+
+/**
+ * How complete the file is, in a few kB that can be read at the app's address.
+ * `sets` is every known link "catalogue:setId" → Cardmarket expansion (also the ones whose
+ * expansion has no sealed product); `catalog` lists the sets of the card catalogue, per catalogue.
+ */
+export function buildReport({ data, sets = {}, catalog = {}, lookups = {}, keys = {} }) {
+	const perExp = new Map()
+	for (const row of data?.p ?? []) perExp.set(row[3], (perExp.get(row[3]) ?? 0) + 1)
+	const m = data?.meta ?? {}
+	const out = {
+		v: 1,
+		built: data?.built ?? null,
+		updated: data?.updated ?? null,
+		stale: !!m.stale,
+		products: m.products ?? 0,
+		priced: m.priced ?? 0,
+		expansions: m.expansions ?? 0,
+		linked: m.mapped ?? 0,
+		catCounts: m.catCounts ?? {},
+		sets: {},
+		orphans: { expansions: 0, products: 0, top: [] },
+		lookups: { tried: m.lookupsTried ?? 0, resolved: m.lookupsResolved ?? 0 },
+		keys,
+		errors: m.errors ?? [],
+	}
+	for (const [cat, list] of Object.entries(catalog)) {
+		const pending = []
+		const unmatched = []
+		const empty = []
+		let linked = 0
+		let withProducts = 0
+		let products = 0
+		for (const s of list ?? []) {
+			const key = `${cat}:${s.id}`
+			const label = `${s.id}|${s.name ?? ''}`
+			const exp = sets[key]
+			if (!exp) {
+				// Looked up and not found on Cardmarket, or not looked up yet.
+				if (lookups[key] && !lookups[key].e) unmatched.push(label)
+				else pending.push(label)
+				continue
+			}
+			linked++
+			const n = perExp.get(exp) ?? 0
+			if (n) {
+				withProducts++
+				products += n
+			} else empty.push(label)
+		}
+		out.sets[cat] = {
+			total: (list ?? []).length,
+			linked,
+			withProducts,
+			products,
+			// Linked to a Cardmarket expansion that has no sealed product (promos, special series).
+			empty: capped(empty, 120),
+			// Cardmarket does not know the cards of these sets: nothing to link.
+			unmatched: capped(unmatched, 120),
+			// Not looked up yet: done at one of the next builds.
+			pending: capped(pending, 120),
+		}
+	}
+	const orphans = Object.entries(data?.exp ?? {})
+		.filter(([, e]) => !e?.s?.length)
+		.map(([id, e]) => [Number(id), e?.n ?? '', perExp.get(Number(id)) ?? 0])
+		.sort((a, b) => b[2] - a[2] || a[0] - b[0])
+	out.orphans = {
+		// Expansions with sealed products that no set of the card catalogue points to:
+		// their products are found with the search, not from a set's page.
+		expansions: orphans.length,
+		products: orphans.reduce((n, o) => n + o[2], 0),
+		unnamed: orphans.filter((o) => !o[1]).length,
+		top: orphans.slice(0, 80),
+	}
+	return out
+}
+
 // ------------------------------------------------------------------ reading
 
 async function load(src, { tries = 3, timeoutMs = 120_000 } = {}) {
@@ -188,12 +272,41 @@ function cardProductIds(card) {
 	return ids
 }
 
+/** The catalogues whose sets are linked to Cardmarket expansions, with the language they are read in. */
+const CATALOGS = [
+	['int', 'en'],
+	['ja', 'ja'],
+]
+
+/** The sets of the card catalogue, without the digital ones (TCG Pocket has no sealed products). */
+async function loadCatalog(log) {
+	const out = {}
+	for (const [catalog, lang] of CATALOGS) {
+		try {
+			const list = await load(`${TCGDEX}/${lang}/sets`, { tries: 2, timeoutMs: 30_000 })
+			let digital = new Set()
+			if (catalog === 'int') {
+				try {
+					const serie = await load(`${TCGDEX}/en/series/tcgp`, { tries: 2, timeoutMs: 30_000 })
+					digital = new Set((serie?.sets ?? []).map((s) => s.id))
+				} catch {
+					/* the digital sets simply stay in the list */
+				}
+			}
+			out[catalog] = (list ?? []).filter((s) => s?.id && !digital.has(s.id)).map((s) => ({ id: String(s.id), name: String(s.name ?? '') }))
+		} catch (err) {
+			log(`elenco dei set ${lang}: ${err.message}`)
+		}
+	}
+	return out
+}
+
 /**
  * Finds the Cardmarket expansion of the sets the seed file does not cover, by looking at a few
  * cards of each set: the catalogue knows their Cardmarket product, and Cardmarket's list of single
  * cards says which expansion a product belongs to.
  */
-async function lookupSets({ known, lookups, log }) {
+async function lookupSets({ known, lookups, catalog, log }) {
 	const started = Date.now()
 	const today = new Date().toISOString().slice(0, 10)
 	const due = (key) => {
@@ -207,40 +320,21 @@ async function lookupSets({ known, lookups, log }) {
 	let singlesExp = null
 	let resolved = 0
 	let tried = 0
-	for (const [catalog, lang] of [
-		['int', 'en'],
-		['ja', 'ja'],
-	]) {
-		let list
-		try {
-			list = await load(`${TCGDEX}/${lang}/sets`, { tries: 2, timeoutMs: 30_000 })
-		} catch (err) {
-			log(`elenco dei set ${lang}: ${err.message}`)
-			continue
-		}
-		let digital = new Set()
-		if (catalog === 'int') {
-			try {
-				const serie = await load(`${TCGDEX}/en/series/tcgp`, { tries: 2, timeoutMs: 30_000 })
-				digital = new Set((serie?.sets ?? []).map((s) => s.id))
-			} catch {
-				/* the digital sets simply stay in the list */
-			}
-		}
-		const todo = (list ?? []).filter((s) => s?.id && !digital.has(s.id) && due(`${catalog}:${s.id}`))
+	for (const [cat, lang] of CATALOGS) {
+		const todo = (catalog[cat] ?? []).filter((s) => due(`${cat}:${s.id}`))
 		if (!todo.length) continue
 		if (!singlesExp) {
 			const singles = await load(SRC.singles)
 			singlesExp = new Map()
 			for (const p of singles?.products ?? []) if (p?.idProduct && p.idExpansion) singlesExp.set(p.idProduct, p.idExpansion)
-			console.log(`Carte singole Cardmarket lette: ${singlesExp.size}; set da collegare: ${todo.length} (${catalog})`)
+			console.log(`Carte singole Cardmarket lette: ${singlesExp.size}; set da collegare: ${todo.length} (${cat})`)
 		}
 		const run = pool(5)
 		await Promise.all(
 			todo.map((s) =>
 				run(async () => {
 					if (Date.now() - started > LOOKUP_BUDGET_MS) return
-					const key = `${catalog}:${s.id}`
+					const key = `${cat}:${s.id}`
 					tried++
 					try {
 						const set = await load(`${TCGDEX}/${lang}/sets/${encodeURIComponent(s.id)}`, { tries: 2, timeoutMs: 30_000 })
@@ -289,6 +383,7 @@ export async function main() {
 	}
 
 	let data
+	let report = null
 	try {
 		const [nonsingles, prices, seed] = await Promise.all([
 			load(SRC.nonsingles),
@@ -307,9 +402,10 @@ export async function main() {
 		let lookups = previous?.lookups && typeof previous.lookups === 'object' ? previous.lookups : {}
 		let tried = 0
 		let resolved = 0
+		const catalog = await loadCatalog(log)
 		if (process.env.SKIP_LOOKUPS !== '1') {
 			try {
-				const res = await lookupSets({ known, lookups, log })
+				const res = await lookupSets({ known, lookups, catalog, log })
 				lookups = res.lookups
 				tried = res.tried
 				resolved = res.resolved
@@ -322,16 +418,20 @@ export async function main() {
 
 		// English names of the international sets, for the expansions' labels.
 		const names = {}
-		try {
-			for (const s of (await load(`${TCGDEX}/en/sets`, { tries: 2, timeoutMs: 30_000 })) ?? []) if (s?.id && s.name) names[`int:${s.id}`] = s.name
-		} catch (err) {
-			log(`nomi dei set: ${err.message}`)
-		}
+		for (const s of catalog.int ?? []) if (s.name) names[`int:${s.id}`] = s.name
 
 		data = buildDataset({ nonsingles, prices, sets, names, lookups })
 		data.meta.lookupsTried = tried
 		data.meta.lookupsResolved = resolved
 		data.meta.errors = errors
+		report = buildReport({
+			data,
+			sets,
+			catalog,
+			lookups,
+			// The columns Cardmarket's files have today, to notice when they change.
+			keys: { product: Object.keys(nonsingles.products[0] ?? {}), price: Object.keys(prices.priceGuides[0] ?? {}) },
+		})
 	} catch (err) {
 		console.warn('! Cardmarket non letto: ' + (err?.message ?? err))
 		if (previous) {
@@ -354,6 +454,9 @@ export async function main() {
 	await mkdir(dirname(OUT), { recursive: true })
 	const text = JSON.stringify(data)
 	await writeFile(OUT, text)
+	// When Cardmarket could not be read the list is the one of last time, and the report only says so.
+	await mkdir(dirname(REPORT), { recursive: true })
+	await writeFile(REPORT, JSON.stringify(report ?? buildReport({ data })))
 	const m = data.meta ?? {}
 	console.log(
 		`Sigillati: ${m.products ?? 0} prodotti (${m.priced ?? 0} con prezzo), ${m.expansions ?? 0} espansioni di cui ${m.mapped ?? 0} collegate a un set; listino del ${data.updated ?? '—'}; ${(text.length / 1024).toFixed(0)} kB → ${OUT}`,
